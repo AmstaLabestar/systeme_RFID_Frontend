@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import type {
   AppNotification,
@@ -6,6 +6,7 @@ import type {
   NotificationIdentifierSections,
   NotificationKind,
 } from '@/app/types';
+import { useAuth } from '@/app/contexts/auth';
 import { createId } from '@/app/services';
 
 interface CreateNotificationInput {
@@ -27,40 +28,59 @@ interface NotificationsContextValue {
 
 const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);
 
-const initialNotifications: AppNotification[] = [
-  {
-    id: 'notif-welcome',
-    title: 'Bienvenue',
-    message: 'Plateforme IoT initialisee. Utilisez le Marketplace pour demarrer vos modules.',
-    kind: 'info',
-    read: false,
-    createdAt: new Date().toISOString(),
-  },
-];
+function buildWelcomeNotifications(scope: string): AppNotification[] {
+  return [
+    {
+      id: `notif-welcome-${scope}`,
+      title: 'Bienvenue',
+      message: 'Plateforme IoT initialisee. Utilisez le Marketplace pour demarrer vos modules.',
+      kind: 'info',
+      read: false,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+}
 
-function pushToast(kind: NotificationKind, title: string, message: string): void {
-  const toastMessage = `${title}: ${message}`;
+function getScopeNotifications(
+  byScope: Record<string, AppNotification[]>,
+  scope: string,
+): AppNotification[] {
+  return byScope[scope] ?? buildWelcomeNotifications(scope);
+}
 
-  if (kind === 'success') {
-    toast.success(toastMessage);
-    return;
-  }
-
-  if (kind === 'error') {
-    toast.error(toastMessage);
-    return;
-  }
-
-  if (kind === 'warning') {
-    toast.warning(toastMessage);
-    return;
-  }
-
-  toast.info(toastMessage);
+function withScopeNotifications(
+  byScope: Record<string, AppNotification[]>,
+  scope: string,
+  updater: (currentNotifications: AppNotification[]) => AppNotification[],
+): Record<string, AppNotification[]> {
+  return {
+    ...byScope,
+    [scope]: updater(getScopeNotifications(byScope, scope)),
+  };
 }
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const [notifications, setNotifications] = useState<AppNotification[]>(initialNotifications);
+  const { user } = useAuth();
+  const userScope = user?.id ?? 'guest';
+  const [notificationsByScope, setNotificationsByScope] = useState<Record<string, AppNotification[]>>({});
+
+  useEffect(() => {
+    setNotificationsByScope((current) => {
+      if (current[userScope]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [userScope]: buildWelcomeNotifications(userScope),
+      };
+    });
+  }, [userScope]);
+
+  const notifications = useMemo(
+    () => notificationsByScope[userScope] ?? [],
+    [notificationsByScope, userScope],
+  );
 
   const addNotification = useCallback(
     (input: CreateNotificationInput): AppNotification => {
@@ -75,7 +95,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       };
 
-      setNotifications((currentNotifications) => [nextNotification, ...currentNotifications]);
+      setNotificationsByScope((current) =>
+        withScopeNotifications(current, userScope, (currentNotifications) => [
+          nextNotification,
+          ...currentNotifications,
+        ]),
+      );
 
       if (input.withToast) {
         pushToast(nextNotification.kind, nextNotification.title, nextNotification.message);
@@ -83,22 +108,29 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
       return nextNotification;
     },
-    [],
+    [userScope],
   );
 
-  const markAsRead = useCallback((notificationId: string) => {
-    setNotifications((currentNotifications) =>
-      currentNotifications.map((notification) =>
-        notification.id === notificationId ? { ...notification, read: true } : notification,
-      ),
-    );
-  }, []);
+  const markAsRead = useCallback(
+    (notificationId: string) => {
+      setNotificationsByScope((current) =>
+        withScopeNotifications(current, userScope, (currentNotifications) =>
+          currentNotifications.map((notification) =>
+            notification.id === notificationId ? { ...notification, read: true } : notification,
+          ),
+        ),
+      );
+    },
+    [userScope],
+  );
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((currentNotifications) =>
-      currentNotifications.map((notification) => ({ ...notification, read: true })),
+    setNotificationsByScope((current) =>
+      withScopeNotifications(current, userScope, (currentNotifications) =>
+        currentNotifications.map((notification) => ({ ...notification, read: true })),
+      ),
     );
-  }, []);
+  }, [userScope]);
 
   const unreadCount = useMemo(
     () => notifications.filter((notification) => !notification.read).length,
@@ -127,4 +159,24 @@ export function useNotifications(): NotificationsContextValue {
   }
 
   return context;
+}
+function pushToast(kind: NotificationKind, title: string, message: string): void {
+  const toastMessage = `${title}: ${message}`;
+
+  if (kind === 'success') {
+    toast.success(toastMessage);
+    return;
+  }
+
+  if (kind === 'error') {
+    toast.error(toastMessage);
+    return;
+  }
+
+  if (kind === 'warning') {
+    toast.warning(toastMessage);
+    return;
+  }
+
+  toast.info(toastMessage);
 }

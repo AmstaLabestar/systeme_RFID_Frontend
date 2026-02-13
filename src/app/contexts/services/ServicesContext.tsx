@@ -1,15 +1,20 @@
 import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from 'react';
-import { buildFeedbackSeed, moduleActionLabels, seedEmployees, seedHistory } from '@/app/data';
-import { createId } from '@/app/services';
+import { buildFeedbackSeed, seedEmployees, seedHistory } from '@/app/data';
+import { accessService, queryKeys, systemStoreService } from '@/app/services';
+import { useAuth } from '@/app/contexts/auth';
 import { useMarketplace } from '@/app/contexts/marketplace';
 import { useNotifications } from '@/app/contexts/notifications';
 import type {
@@ -27,9 +32,9 @@ interface ServicesContextValue {
   assignments: ServiceAssignment[];
   history: HistoryEvent[];
   feedbackRecords: FeedbackRecord[];
-  assignIdentifier: (input: AssignIdentifierInput) => void;
-  removeAssignment: (assignmentId: string) => void;
-  reassignIdentifier: (input: ReassignIdentifierInput) => void;
+  assignIdentifier: (input: AssignIdentifierInput) => Promise<void>;
+  removeAssignment: (assignmentId: string) => Promise<void>;
+  reassignIdentifier: (input: ReassignIdentifierInput) => Promise<void>;
   getAssignmentsByModule: (module: ModuleKey) => ServiceAssignment[];
   getHistoryByModule: (module?: ModuleKey) => HistoryEvent[];
   getHistoryByDevice: (deviceId: string, module?: ModuleKey) => HistoryEvent[];
@@ -38,273 +43,155 @@ interface ServicesContextValue {
 
 const ServicesContext = createContext<ServicesContextValue | undefined>(undefined);
 
-function normalizeName(value: string): string {
-  return value.trim().toLowerCase();
-}
+const initialServicesState = {
+  employees: seedEmployees,
+  assignments: [] as ServiceAssignment[],
+  history: seedHistory,
+  feedbackRecords: [] as FeedbackRecord[],
+};
 
 export function ServicesProvider({ children }: { children: ReactNode }) {
-  const [employees, setEmployees] = useState<Employee[]>(seedEmployees);
-  const [assignments, setAssignments] = useState<ServiceAssignment[]>([]);
-  const [history, setHistory] = useState<HistoryEvent[]>(seedHistory);
-  const [feedbackRecords, setFeedbackRecords] = useState<FeedbackRecord[]>([]);
-
+  const queryClient = useQueryClient();
   const feedbackSeededDeviceIds = useRef(new Set<string>());
+  const { user } = useAuth();
+  const userScope = user?.id ?? 'guest';
 
-  const {
-    devices,
-    assignIdentifierToEmployee,
-    releaseIdentifier,
-    getInventoryById,
-  } = useMarketplace();
+  const { devices, applyMarketplaceState } = useMarketplace();
   const { addNotification } = useNotifications();
 
+  const servicesStateQuery = useQuery({
+    queryKey: queryKeys.services.state(userScope),
+    queryFn: systemStoreService.fetchServicesState,
+    initialData: initialServicesState,
+    enabled: Boolean(user),
+  });
+
+  const servicesState = servicesStateQuery.data;
+  const employees = servicesState.employees;
+  const assignments = servicesState.assignments;
+  const history = servicesState.history;
+  const feedbackRecords = servicesState.feedbackRecords;
+
+  const saveServicesStateMutation = useMutation({
+    mutationFn: systemStoreService.saveServicesState,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: accessService.assignIdentifier,
+    onSuccess: (response) => {
+      queryClient.setQueryData(queryKeys.services.state(userScope), response.servicesState);
+      applyMarketplaceState(response.marketplaceState);
+    },
+    mutationKey: ['services', 'assign', userScope],
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: accessService.removeAssignment,
+    onSuccess: (response) => {
+      queryClient.setQueryData(queryKeys.services.state(userScope), response.servicesState);
+      applyMarketplaceState(response.marketplaceState);
+    },
+    mutationKey: ['services', 'remove', userScope],
+  });
+
+  const reassignMutation = useMutation({
+    mutationFn: accessService.reassignIdentifier,
+    onSuccess: (response) => {
+      queryClient.setQueryData(queryKeys.services.state(userScope), response.servicesState);
+      applyMarketplaceState(response.marketplaceState);
+    },
+    mutationKey: ['services', 'reassign', userScope],
+  });
+
   useEffect(() => {
+    feedbackSeededDeviceIds.current = new Set(feedbackRecords.map((record) => record.deviceId));
+  }, [feedbackRecords]);
+
+  useEffect(() => {
+    if (!servicesStateQuery.isFetchedAfterMount) {
+      return;
+    }
+
     const configuredFeedbackDevices = devices.filter(
       (device) => device.module === 'feedback' && device.configured,
     );
 
-    configuredFeedbackDevices.forEach((device) => {
-      if (feedbackSeededDeviceIds.current.has(device.id)) {
-        return;
+    const newRecords = configuredFeedbackDevices.flatMap((device) => {
+      const alreadyPersisted = feedbackRecords.some((record) => record.deviceId === device.id);
+
+      if (feedbackSeededDeviceIds.current.has(device.id) || alreadyPersisted) {
+        feedbackSeededDeviceIds.current.add(device.id);
+        return [];
       }
 
       feedbackSeededDeviceIds.current.add(device.id);
-      setFeedbackRecords((currentRecords) => [...currentRecords, ...buildFeedbackSeed(device.id, 90)]);
-    });
-  }, [devices]);
-
-  const upsertEmployee = useCallback((firstName: string, lastName: string): Employee => {
-    const normalizedFirstName = normalizeName(firstName);
-    const normalizedLastName = normalizeName(lastName);
-
-    let selectedEmployee: Employee | undefined;
-
-    setEmployees((currentEmployees) => {
-      selectedEmployee = currentEmployees.find(
-        (employee) =>
-          normalizeName(employee.firstName) === normalizedFirstName &&
-          normalizeName(employee.lastName) === normalizedLastName,
-      );
-
-      if (selectedEmployee) {
-        return currentEmployees;
-      }
-
-      const newEmployee: Employee = {
-        id: createId('emp'),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        fullName: `${firstName.trim()} ${lastName.trim()}`,
-      };
-
-      selectedEmployee = newEmployee;
-      return [newEmployee, ...currentEmployees];
+      return buildFeedbackSeed(device.id, 90);
     });
 
-    if (!selectedEmployee) {
-      throw new Error('Impossible de preparer l employee.');
+    if (newRecords.length === 0) {
+      return;
     }
 
-    return selectedEmployee;
-  }, []);
+    const nextState = {
+      ...servicesState,
+      feedbackRecords: [...feedbackRecords, ...newRecords],
+    };
 
-  const appendHistory = useCallback(
-    (entry: Omit<HistoryEvent, 'id' | 'occurredAt'>) => {
-      const event: HistoryEvent = {
-        id: createId('hist'),
-        occurredAt: new Date().toISOString(),
-        ...entry,
-      };
-
-      setHistory((currentHistory) => [event, ...currentHistory]);
-    },
-    [],
-  );
+    queryClient.setQueryData(queryKeys.services.state(userScope), nextState);
+    saveServicesStateMutation.mutate(nextState);
+  }, [
+    devices,
+    feedbackRecords,
+    servicesState,
+    servicesStateQuery.isFetchedAfterMount,
+    queryClient,
+    saveServicesStateMutation,
+    userScope,
+  ]);
 
   const assignIdentifier = useCallback(
-    (input: AssignIdentifierInput) => {
-      const device = devices.find((candidate) => candidate.id === input.deviceId && candidate.module === input.module);
-
-      if (!device) {
-        throw new Error('Boitier introuvable pour ce module.');
-      }
-
-      if (!device.configured) {
-        throw new Error('Configurez ce boitier avant l attribution.');
-      }
-
-      const employee = upsertEmployee(input.firstName, input.lastName);
-
-      const alreadyAssignedForEmployee = assignments.find(
-        (assignment) => assignment.module === input.module && assignment.employeeId === employee.id,
-      );
-
-      if (alreadyAssignedForEmployee) {
-        throw new Error('Cet employee possede deja un identifiant sur ce module.');
-      }
-
-      const assignedIdentifier = assignIdentifierToEmployee({
-        module: input.module,
-        deviceId: input.deviceId,
-        identifierId: input.identifierId,
-        employeeId: employee.id,
-      });
-
-      const assignment: ServiceAssignment = {
-        id: createId('asn'),
-        module: input.module,
-        deviceId: input.deviceId,
-        identifierId: input.identifierId,
-        employeeId: employee.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      setAssignments((currentAssignments) => [assignment, ...currentAssignments]);
-
-      appendHistory({
-        module: input.module,
-        deviceId: device.id,
-        employee: employee.fullName,
-        identifier: assignedIdentifier.code,
-        device: device.name,
-        action: moduleActionLabels[input.module].assign,
-      });
+    async (input: AssignIdentifierInput) => {
+      const response = await assignMutation.mutateAsync(input);
 
       addNotification({
         title: 'Identifiant assigne',
-        message: `${assignedIdentifier.code} associe a ${employee.fullName} sur ${device.name}.`,
-        module: input.module,
+        message: `${response.meta.identifierCode} associe a ${response.meta.employeeName} sur ${response.meta.deviceName}.`,
+        module: response.meta.module,
         kind: 'success',
         withToast: true,
       });
     },
-    [devices, assignments, upsertEmployee, assignIdentifierToEmployee, appendHistory, addNotification],
+    [assignMutation, addNotification],
   );
 
   const removeAssignment = useCallback(
-    (assignmentId: string) => {
-      const assignment = assignments.find((currentAssignment) => currentAssignment.id === assignmentId);
-
-      if (!assignment) {
-        throw new Error('Association introuvable.');
-      }
-
-      const employee = employees.find((candidate) => candidate.id === assignment.employeeId);
-      const device = devices.find((candidate) => candidate.id === assignment.deviceId);
-      const identifier = getInventoryById(assignment.identifierId);
-
-      if (!employee || !device || !identifier) {
-        throw new Error('Donnees incompletes pour retirer cette association.');
-      }
-
-      releaseIdentifier(assignment.identifierId);
-      setAssignments((currentAssignments) =>
-        currentAssignments.filter((currentAssignment) => currentAssignment.id !== assignmentId),
-      );
-
-      appendHistory({
-        module: assignment.module,
-        deviceId: device.id,
-        employee: employee.fullName,
-        identifier: identifier.code,
-        device: device.name,
-        action: moduleActionLabels[assignment.module].remove,
-      });
+    async (assignmentId: string) => {
+      const response = await removeMutation.mutateAsync(assignmentId);
 
       addNotification({
         title: 'Association retiree',
-        message: `${identifier.code} est redevenu disponible.`,
-        module: assignment.module,
+        message: `${response.meta.identifierCode} est redevenu disponible.`,
+        module: response.meta.module,
         kind: 'warning',
         withToast: true,
       });
     },
-    [assignments, employees, devices, getInventoryById, releaseIdentifier, appendHistory, addNotification],
+    [removeMutation, addNotification],
   );
 
   const reassignIdentifier = useCallback(
-    (input: ReassignIdentifierInput) => {
-      const existingAssignment = assignments.find(
-        (currentAssignment) => currentAssignment.id === input.assignmentId,
-      );
-
-      if (!existingAssignment) {
-        throw new Error('Association introuvable pour la reattribution.');
-      }
-
-      const targetDevice = devices.find((device) => device.id === input.deviceId);
-
-      if (!targetDevice || !targetDevice.configured || targetDevice.module !== existingAssignment.module) {
-        throw new Error('Boitier cible invalide.');
-      }
-
-      const employee = upsertEmployee(input.firstName, input.lastName);
-      const duplicateEmployeeAssignment = assignments.find(
-        (assignment) =>
-          assignment.module === existingAssignment.module &&
-          assignment.employeeId === employee.id &&
-          assignment.id !== existingAssignment.id,
-      );
-
-      if (duplicateEmployeeAssignment) {
-        throw new Error('Cet employee possede deja un identifiant sur ce module.');
-      }
-
-      const currentIdentifier = getInventoryById(existingAssignment.identifierId);
-
-      if (!currentIdentifier) {
-        throw new Error('Identifiant indisponible.');
-      }
-
-      releaseIdentifier(existingAssignment.identifierId);
-      const reassignedIdentifier = assignIdentifierToEmployee({
-        module: existingAssignment.module,
-        deviceId: input.deviceId,
-        identifierId: existingAssignment.identifierId,
-        employeeId: employee.id,
-      });
-
-      setAssignments((currentAssignments) =>
-        currentAssignments.map((assignment) =>
-          assignment.id === input.assignmentId
-            ? {
-                ...assignment,
-                employeeId: employee.id,
-                deviceId: input.deviceId,
-                updatedAt: new Date().toISOString(),
-              }
-            : assignment,
-        ),
-      );
-
-      appendHistory({
-        module: existingAssignment.module,
-        deviceId: targetDevice.id,
-        employee: employee.fullName,
-        identifier: reassignedIdentifier.code,
-        device: targetDevice.name,
-        action: 'Reattribution identifiant',
-      });
+    async (input: ReassignIdentifierInput) => {
+      const response = await reassignMutation.mutateAsync(input);
 
       addNotification({
         title: 'Identifiant reattribue',
-        message: `${reassignedIdentifier.code} est maintenant lie a ${employee.fullName}.`,
-        module: existingAssignment.module,
+        message: `${response.meta.identifierCode} est maintenant lie a ${response.meta.employeeName}.`,
+        module: response.meta.module,
         kind: 'success',
         withToast: true,
       });
     },
-    [
-      assignments,
-      devices,
-      upsertEmployee,
-      getInventoryById,
-      releaseIdentifier,
-      assignIdentifierToEmployee,
-      appendHistory,
-      addNotification,
-    ],
+    [reassignMutation, addNotification],
   );
 
   const getAssignmentsByModule = useCallback(

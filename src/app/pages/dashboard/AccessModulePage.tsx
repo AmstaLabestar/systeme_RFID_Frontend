@@ -149,7 +149,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   const onSubmit = async (values: AssignmentFormValues) => {
     try {
       if (!editingAssignmentId) {
-        assignIdentifier({
+        await assignIdentifier({
           module,
           deviceId: values.deviceId,
           identifierId: values.identifierId,
@@ -165,7 +165,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
         return;
       }
 
-      reassignIdentifier({
+      await reassignIdentifier({
         assignmentId: editingAssignmentId,
         deviceId: values.deviceId,
         firstName: values.firstName,
@@ -184,9 +184,9 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     }
   };
 
-  const handleRemoveAssignment = (assignmentId: string) => {
+  const handleRemoveAssignment = async (assignmentId: string) => {
     try {
-      removeAssignment(assignmentId);
+      await removeAssignment(assignmentId);
       if (editingAssignmentId === assignmentId) {
         setEditingAssignmentId(null);
       }
@@ -472,7 +472,9 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                               <button
                                 type="button"
                                 className="btn btn-xs btn-outline btn-error"
-                                onClick={() => handleRemoveAssignment(assignment.id)}
+                                onClick={() => {
+                                  void handleRemoveAssignment(assignment.id);
+                                }}
                               >
                                 <Trash2 className="h-3 w-3" />
                                 Retirer

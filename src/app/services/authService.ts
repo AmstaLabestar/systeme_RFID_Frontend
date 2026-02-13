@@ -1,18 +1,24 @@
 import type { AuthUser } from '@/app/types';
+import {
+  AUTH_ROUTES,
+  toAuthResponse,
+  toGoogleVerifyPayload,
+  toSessionUserResponse,
+  toSignInPayload,
+  toSignUpPayload,
+  toWhatsAppOtpRequestResponse,
+  toWhatsAppRequestPayload,
+  toWhatsAppVerifyPayload,
+} from './contracts';
 import { apiRequest } from './apiClient';
 import { createId, delay } from './utils';
 
-const USERS_STORAGE_KEY = 'rfid.mock.users';
 const GOOGLE_OAUTH_STATE_KEY = 'rfid.oauth.google.state';
 const GOOGLE_OAUTH_NONCE_KEY = 'rfid.oauth.google.nonce';
 const GOOGLE_OAUTH_REDIRECT_KEY = 'rfid.oauth.google.redirect';
 const DEFAULT_REDIRECT_PATH = '/dashboard/overview';
 const DEFAULT_AUTH_API_BASE_URL = 'http://localhost:4011';
-
-interface StoredUser extends AuthUser {
-  password: string;
-  phone?: string;
-}
+const GOOGLE_CLIENT_ID_PLACEHOLDER = 'your-google-client-id';
 
 export interface SignInPayload {
   email: string;
@@ -70,89 +76,37 @@ interface GoogleIdTokenPayload {
   nonce?: string;
 }
 
-function getSeedUsers(): StoredUser[] {
-  return [
-    {
-      id: 'usr-admin',
-      firstName: 'Admin',
-      lastName: 'SaaS',
-      company: 'Tech Souveraine',
-      email: 'admin@techsouveraine.io',
-      password: 'demo12345',
-    },
-  ];
-}
-
-function readUsers(): StoredUser[] {
-  const rawUsers = window.localStorage.getItem(USERS_STORAGE_KEY);
-
-  if (!rawUsers) {
-    const seedUsers = getSeedUsers();
-    window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(seedUsers));
-    return seedUsers;
-  }
-
-  try {
-    return JSON.parse(rawUsers) as StoredUser[];
-  } catch {
-    const seedUsers = getSeedUsers();
-    window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(seedUsers));
-    return seedUsers;
-  }
-}
-
-function writeUsers(users: StoredUser[]): void {
-  window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-}
-
-function buildAuthResponse(user: StoredUser): AuthResponse {
-  const { password: _password, phone: _phone, ...safeUser } = user;
-  const token = btoa(`${safeUser.id}:${Date.now()}`);
-
-  return {
-    token,
-    user: safeUser,
-  };
-}
-
 function getAuthApiBaseUrl(): string {
   return (import.meta.env.VITE_AUTH_API_URL || DEFAULT_AUTH_API_BASE_URL).replace(/\/+$/, '');
+}
+
+export function isGoogleOAuthConfigured(): boolean {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  if (!clientId) {
+    return false;
+  }
+
+  const normalizedClientId = clientId.trim();
+  if (!normalizedClientId) {
+    return false;
+  }
+
+  return !normalizedClientId.includes(GOOGLE_CLIENT_ID_PLACEHOLDER);
 }
 
 function getGoogleClientId(): string {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  if (!clientId) {
+  if (!isGoogleOAuthConfigured()) {
     throw new Error('Google OAuth non configure: ajoutez VITE_GOOGLE_CLIENT_ID dans votre .env.local.');
   }
 
-  return clientId;
+  return clientId.trim();
 }
 
 function getGoogleRedirectUri(): string {
   return import.meta.env.VITE_GOOGLE_REDIRECT_URI || `${window.location.origin}/auth/google/callback`;
-}
-
-function parseName(payload: GoogleIdTokenPayload): { firstName: string; lastName: string } {
-  if (payload.given_name || payload.family_name) {
-    return {
-      firstName: payload.given_name || 'Google',
-      lastName: payload.family_name || 'User',
-    };
-  }
-
-  if (payload.name) {
-    const [firstName, ...rest] = payload.name.trim().split(/\s+/);
-    return {
-      firstName: firstName || 'Google',
-      lastName: rest.join(' ') || 'User',
-    };
-  }
-
-  return {
-    firstName: 'Google',
-    lastName: 'User',
-  };
 }
 
 function decodeGoogleIdToken(idToken: string): GoogleIdTokenPayload {
@@ -206,52 +160,42 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function upsertUser(nextUser: StoredUser): StoredUser {
-  const users = readUsers();
-  const existingUserIndex = users.findIndex((item) => item.email.toLowerCase() === nextUser.email.toLowerCase());
-
-  if (existingUserIndex === -1) {
-    const nextUsers = [nextUser, ...users];
-    writeUsers(nextUsers);
-    return nextUser;
-  }
-
-  const existingUser = users[existingUserIndex];
-  const mergedUser: StoredUser = {
-    ...existingUser,
-    ...nextUser,
-    password: existingUser.password,
-  };
-
-  users[existingUserIndex] = mergedUser;
-  writeUsers(users);
-  return mergedUser;
-}
-
 export const authService = {
+  async getSession(token: string): Promise<AuthUser> {
+    const response = await apiRequest<unknown>({
+      endpoint: `${getAuthApiBaseUrl()}${AUTH_ROUTES.session}`,
+      token,
+    });
+    return toSessionUserResponse(response);
+  },
+
   async signIn(payload: SignInPayload): Promise<AuthResponse> {
-    return apiRequest<AuthResponse>({
-      endpoint: `${getAuthApiBaseUrl()}/auth/signin`,
+    const response = await apiRequest<unknown>({
+      endpoint: `${getAuthApiBaseUrl()}${AUTH_ROUTES.signIn}`,
       method: 'POST',
-      body: {
+      body: toSignInPayload({
         email: normalizeEmail(payload.email),
         password: payload.password,
-      },
+      }),
     });
+
+    return toAuthResponse(response);
   },
 
   async signUp(payload: SignUpPayload): Promise<AuthResponse> {
-    return apiRequest<AuthResponse>({
-      endpoint: `${getAuthApiBaseUrl()}/auth/signup`,
+    const response = await apiRequest<unknown>({
+      endpoint: `${getAuthApiBaseUrl()}${AUTH_ROUTES.signUp}`,
       method: 'POST',
-      body: {
+      body: toSignUpPayload({
         firstName: payload.firstName.trim(),
         lastName: payload.lastName.trim(),
         company: payload.company.trim(),
         email: normalizeEmail(payload.email),
         password: payload.password,
-      },
+      }),
     });
+
+    return toAuthResponse(response);
   },
 
   startGoogleOAuth(redirectTo = DEFAULT_REDIRECT_PATH): void {
@@ -310,18 +254,12 @@ export const authService = {
       throw new Error('Votre email Google doit etre verifie pour continuer.');
     }
 
-    const { firstName, lastName } = parseName(decodedPayload);
-    const providerUserIdSuffix = decodedPayload.sub.slice(-8);
-    const googleUser: StoredUser = {
-      id: `usr-goog-${providerUserIdSuffix}`,
-      firstName,
-      lastName,
-      company: 'Google Workspace',
-      email: decodedPayload.email.toLowerCase(),
-      password: `oauth-google-${providerUserIdSuffix}`,
-    };
-    const persistedUser = upsertUser(googleUser);
-    const authResponse = buildAuthResponse(persistedUser);
+    const response = await apiRequest<unknown>({
+      endpoint: `${getAuthApiBaseUrl()}${AUTH_ROUTES.googleVerify}`,
+      method: 'POST',
+      body: toGoogleVerifyPayload(payload.idToken),
+    });
+    const authResponse = toAuthResponse(response);
 
     return {
       ...authResponse,
@@ -330,24 +268,26 @@ export const authService = {
   },
 
   async requestWhatsAppOtp(payload: WhatsAppOtpRequestPayload): Promise<WhatsAppOtpRequestResponse> {
-    return apiRequest<WhatsAppOtpRequestResponse>({
-      endpoint: `${getAuthApiBaseUrl()}/auth/whatsapp/request`,
+    const response = await apiRequest<unknown>({
+      endpoint: `${getAuthApiBaseUrl()}${AUTH_ROUTES.whatsappRequest}`,
       method: 'POST',
-      body: {
-        phone: normalizePhone(payload.phone),
-      },
+      body: toWhatsAppRequestPayload(normalizePhone(payload.phone)),
     });
+
+    return toWhatsAppOtpRequestResponse(response);
   },
 
   async verifyWhatsAppOtp(payload: WhatsAppOtpVerifyPayload): Promise<AuthResponse> {
-    return apiRequest<AuthResponse>({
-      endpoint: `${getAuthApiBaseUrl()}/auth/whatsapp/verify`,
+    const response = await apiRequest<unknown>({
+      endpoint: `${getAuthApiBaseUrl()}${AUTH_ROUTES.whatsappVerify}`,
       method: 'POST',
-      body: {
+      body: toWhatsAppVerifyPayload({
         requestId: payload.requestId,
         code: payload.code,
         phone: normalizePhone(payload.phone),
-      },
+      }),
     });
+
+    return toAuthResponse(response);
   },
 };

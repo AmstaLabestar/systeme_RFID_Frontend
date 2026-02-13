@@ -1,79 +1,69 @@
-import { MARKETPLACE_CATALOG } from '@/app/data';
-import type { Product } from '@/app/types';
-import { delay } from './utils';
+import type { DeviceConfigurationInput, ModuleKey, Product, PurchaseResult } from '@/app/types';
+import {
+  MARKETPLACE_ROUTES,
+  toActivateDevicePayload,
+  toActivateDeviceResponse,
+  toMarketplaceState,
+  toProductList,
+  toPurchasePayload,
+  toPurchaseResponse,
+} from './contracts';
+import { systemApiClient, toApiErrorMessage } from './httpClient';
+import type { MarketplaceStatePayload } from './types';
 
-export interface PurchaseSimulationRequest {
-  product: Product;
-  quantity: number;
-  remainingStock: number | null;
+export interface PurchaseProductResponse {
+  purchaseId: string;
+  createdDevices: PurchaseResult['createdDevices'];
+  createdIdentifiers: PurchaseResult['createdIdentifiers'];
+  redirectModule: ModuleKey;
+  marketplaceState: MarketplaceStatePayload;
 }
 
-export interface PurchaseSimulationResponse {
-  acceptedAt: string;
-  remainingStock: number | null;
-}
-
-export interface ActivateDeviceSimulationRequest {
-  provisionedMacAddress: string;
-  requestedSystemIdentifier: string;
-}
-
-export interface ActivateDeviceSimulationResponse {
-  activatedAt: string;
-  systemIdentifier: string;
-}
-
-function normalizeMacAddress(value: string): string {
-  return value.trim().toUpperCase().replaceAll('-', ':');
+export interface ActivateDeviceResponse {
+  device: PurchaseResult['createdDevices'][number];
+  marketplaceState: MarketplaceStatePayload;
 }
 
 export const marketplaceService = {
   async fetchCatalog(): Promise<Product[]> {
-    await delay(200);
-    return MARKETPLACE_CATALOG;
+    try {
+      const response = await systemApiClient.get<unknown>(MARKETPLACE_ROUTES.catalog);
+      return toProductList(response.data);
+    } catch (error) {
+      throw new Error(toApiErrorMessage(error, 'Impossible de charger le catalogue.'));
+    }
   },
 
-  // Mock endpoint: replace by POST /marketplace/purchase once backend is ready.
-  async simulatePurchase(request: PurchaseSimulationRequest): Promise<PurchaseSimulationResponse> {
-    await delay(260);
-
-    if (!Number.isInteger(request.quantity) || request.quantity < 1) {
-      throw new Error('La quantite doit etre superieure a 0.');
+  async fetchMarketplaceState(): Promise<MarketplaceStatePayload> {
+    try {
+      const response = await systemApiClient.get<unknown>(MARKETPLACE_ROUTES.state);
+      return toMarketplaceState(response.data);
+    } catch (error) {
+      throw new Error(toApiErrorMessage(error, 'Impossible de charger l etat Marketplace.'));
     }
-
-    if (request.remainingStock !== null && request.quantity > request.remainingStock) {
-      throw new Error('Stock materiel insuffisant pour ce boitier.');
-    }
-
-    return {
-      acceptedAt: new Date().toISOString(),
-      remainingStock:
-        request.remainingStock === null
-          ? null
-          : Math.max(request.remainingStock - request.quantity, 0),
-    };
   },
 
-  // Mock endpoint: replace by POST /devices/:id/activate once backend is ready.
-  async simulateDeviceActivation(
-    request: ActivateDeviceSimulationRequest,
-  ): Promise<ActivateDeviceSimulationResponse> {
-    await delay(220);
-
-    const provisionedMac = normalizeMacAddress(request.provisionedMacAddress);
-    const requestedMac = normalizeMacAddress(request.requestedSystemIdentifier);
-
-    if (!requestedMac) {
-      throw new Error('Adresse MAC requise pour activer le boitier.');
+  async purchaseProduct(payload: { productId: string; quantity: number }): Promise<PurchaseProductResponse> {
+    try {
+      const response = await systemApiClient.post<unknown>(
+        MARKETPLACE_ROUTES.purchases,
+        toPurchasePayload(payload),
+      );
+      return toPurchaseResponse(response.data);
+    } catch (error) {
+      throw new Error(toApiErrorMessage(error, 'Achat impossible.'));
     }
+  },
 
-    if (requestedMac !== provisionedMac) {
-      throw new Error('La MAC saisie ne correspond pas a la MAC livree avec le boitier.');
+  async activateDevice(deviceId: string, input: DeviceConfigurationInput): Promise<ActivateDeviceResponse> {
+    try {
+      const response = await systemApiClient.post<unknown>(
+        MARKETPLACE_ROUTES.activateDevice(deviceId),
+        toActivateDevicePayload(input),
+      );
+      return toActivateDeviceResponse(response.data);
+    } catch (error) {
+      throw new Error(toApiErrorMessage(error, 'Activation impossible.'));
     }
-
-    return {
-      activatedAt: new Date().toISOString(),
-      systemIdentifier: requestedMac,
-    };
   },
 };

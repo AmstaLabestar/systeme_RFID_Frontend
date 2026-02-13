@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/contexts';
+import { isGoogleOAuthConfigured } from '@/app/services';
 import { AuthShell } from './AuthShell';
 
 interface RegisterFormValues {
@@ -17,6 +18,7 @@ interface RegisterFormValues {
 export function RegisterPage() {
   const navigate = useNavigate();
   const { isAuthenticated, signUp, startGoogleOAuth } = useAuth();
+  const isGoogleOAuthAvailable = isGoogleOAuthConfigured();
   const fieldWrapperClassName = 'flex w-full flex-col gap-1.5';
   const fieldLabelClassName = 'text-sm font-medium text-[var(--text-secondary)]';
   const fieldInputClassName = 'input input-bordered w-full bg-[var(--surface-muted)]';
@@ -165,15 +167,17 @@ export function RegisterPage() {
           <span className="h-px flex-1 bg-[var(--border-soft)]" />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            className="btn btn-outline w-full"
-            disabled={isSubmitting || isGoogleRedirecting}
-            onClick={onGoogleSignIn}
-          >
-            {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
-          </button>
+        <div className={`grid gap-3 ${isGoogleOAuthAvailable ? 'sm:grid-cols-2' : ''}`}>
+          {isGoogleOAuthAvailable ? (
+            <button
+              type="button"
+              className="btn btn-outline w-full"
+              disabled={isSubmitting || isGoogleRedirecting}
+              onClick={onGoogleSignIn}
+            >
+              {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-outline w-full"

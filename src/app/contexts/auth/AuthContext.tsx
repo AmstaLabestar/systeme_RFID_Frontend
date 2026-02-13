@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AuthUser } from '@/app/types';
 import {
   authService,
@@ -30,34 +31,67 @@ const STORAGE_USER_KEY = 'rfid.auth.user';
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const clearSession = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    window.localStorage.removeItem(STORAGE_TOKEN_KEY);
+    window.localStorage.removeItem(STORAGE_USER_KEY);
+    queryClient.clear();
+  }, [queryClient]);
+
   useEffect(() => {
-    const rawToken = window.localStorage.getItem(STORAGE_TOKEN_KEY);
-    const rawUser = window.localStorage.getItem(STORAGE_USER_KEY);
+    let isMounted = true;
 
-    if (rawToken && rawUser) {
-      try {
-        const parsedUser = JSON.parse(rawUser) as AuthUser;
-        setToken(rawToken);
-        setUser(parsedUser);
-      } catch {
-        window.localStorage.removeItem(STORAGE_TOKEN_KEY);
-        window.localStorage.removeItem(STORAGE_USER_KEY);
+    const hydrateSession = async () => {
+      const rawToken = window.localStorage.getItem(STORAGE_TOKEN_KEY);
+
+      if (!rawToken) {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+        return;
       }
-    }
 
-    setIsLoading(false);
-  }, []);
+      try {
+        const sessionUser = await authService.getSession(rawToken);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setToken(rawToken);
+        setUser(sessionUser);
+        window.localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(sessionUser));
+      } catch {
+        if (isMounted) {
+          clearSession();
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void hydrateSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clearSession]);
 
   const persistSession = useCallback((nextToken: string, nextUser: AuthUser) => {
+    queryClient.clear();
     setToken(nextToken);
     setUser(nextUser);
     window.localStorage.setItem(STORAGE_TOKEN_KEY, nextToken);
     window.localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(nextUser));
-  }, []);
+  }, [queryClient]);
 
   const signIn = useCallback(
     async (payload: SignInPayload) => {
@@ -98,11 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [persistSession]);
 
   const signOut = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    window.localStorage.removeItem(STORAGE_TOKEN_KEY);
-    window.localStorage.removeItem(STORAGE_USER_KEY);
-  }, []);
+    clearSession();
+  }, [clearSession]);
 
   const value = useMemo(
     () => ({

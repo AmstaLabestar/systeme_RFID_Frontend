@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useAuth } from '@/app/contexts';
+import { isGoogleOAuthConfigured } from '@/app/services';
 import { AuthShell } from './AuthShell';
 
 interface LoginFormValues {
@@ -14,6 +15,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated, signIn, startGoogleOAuth } = useAuth();
+  const isGoogleOAuthAvailable = isGoogleOAuthConfigured();
   const fieldWrapperClassName = 'flex w-full flex-col gap-1.5';
   const fieldLabelClassName = 'text-sm font-medium text-[var(--text-secondary)]';
   const fieldInputClassName = 'input input-bordered w-full bg-[var(--surface-muted)]';
@@ -26,8 +28,8 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     defaultValues: {
-      email: 'admin@techsouveraine.io',
-      password: 'demo12345',
+      email: 'labestar04@gmail.com',
+      password: '12345678',
     },
   });
 
@@ -84,7 +86,7 @@ export function LoginPage() {
           <input
             type="email"
             className={fieldInputClassName}
-            placeholder="admin@techsouveraine.io"
+            placeholder="labestar04@gmail.com"
             {...register('email', { required: 'Email requis' })}
           />
           <span className={fieldErrorClassName}>{errors.email?.message ?? ''}</span>
@@ -115,15 +117,17 @@ export function LoginPage() {
           <span className="h-px flex-1 bg-[var(--border-soft)]" />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            className="btn btn-outline w-full"
-            disabled={isSubmitting || isGoogleRedirecting}
-            onClick={onGoogleSignIn}
-          >
-            {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
-          </button>
+        <div className={`grid gap-3 ${isGoogleOAuthAvailable ? 'sm:grid-cols-2' : ''}`}>
+          {isGoogleOAuthAvailable ? (
+            <button
+              type="button"
+              className="btn btn-outline w-full"
+              disabled={isSubmitting || isGoogleRedirecting}
+              onClick={onGoogleSignIn}
+            >
+              {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-outline w-full"
@@ -136,7 +140,7 @@ export function LoginPage() {
       </form>
 
       <p className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--text-secondary)]">
-        Compte demo: admin@techsouveraine.io / demo12345
+        Compte demo: labestar04@gmail.com / 12345678
       </p>
     </AuthShell>
   );
