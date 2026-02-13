@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AuthUser } from '@/app/types';
-import { authService, type SignInPayload, type SignUpPayload } from '@/app/services';
+import {
+  authService,
+  type GoogleOAuthCallbackPayload,
+  type SignInPayload,
+  type SignUpPayload,
+  type WhatsAppOtpRequestPayload,
+  type WhatsAppOtpRequestResponse,
+  type WhatsAppOtpVerifyPayload,
+} from '@/app/services';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -9,6 +17,10 @@ interface AuthContextValue {
   isLoading: boolean;
   signIn: (payload: SignInPayload) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
+  startGoogleOAuth: (redirectTo?: string) => void;
+  completeGoogleOAuth: (payload: GoogleOAuthCallbackPayload) => Promise<string>;
+  requestWhatsAppOtp: (payload: WhatsAppOtpRequestPayload) => Promise<WhatsAppOtpRequestResponse>;
+  verifyWhatsAppOtp: (payload: WhatsAppOtpVerifyPayload) => Promise<void>;
   signOut: () => void;
 }
 
@@ -63,6 +75,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persistSession],
   );
 
+  const startGoogleOAuth = useCallback((redirectTo?: string) => {
+    authService.startGoogleOAuth(redirectTo);
+  }, []);
+
+  const completeGoogleOAuth = useCallback(
+    async (payload: GoogleOAuthCallbackPayload): Promise<string> => {
+      const response = await authService.completeGoogleOAuth(payload);
+      persistSession(response.token, response.user);
+      return response.redirectTo;
+    },
+    [persistSession],
+  );
+
+  const requestWhatsAppOtp = useCallback(async (payload: WhatsAppOtpRequestPayload) => {
+    return authService.requestWhatsAppOtp(payload);
+  }, []);
+
+  const verifyWhatsAppOtp = useCallback(async (payload: WhatsAppOtpVerifyPayload) => {
+    const response = await authService.verifyWhatsAppOtp(payload);
+    persistSession(response.token, response.user);
+  }, [persistSession]);
+
   const signOut = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -78,9 +112,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(user && token),
       signIn,
       signUp,
+      startGoogleOAuth,
+      completeGoogleOAuth,
+      requestWhatsAppOtp,
+      verifyWhatsAppOtp,
       signOut,
     }),
-    [user, token, isLoading, signIn, signUp, signOut],
+    [user, token, isLoading, signIn, signUp, startGoogleOAuth, completeGoogleOAuth, requestWhatsAppOtp, verifyWhatsAppOtp, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

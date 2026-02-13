@@ -7,5 +7,14 @@
 
   Run `npm i` to install the dependencies.
 
-  Run `npm run dev` to start the development server.
+  Create `.env.local` from `.env.example` and set your Google OAuth Client ID.
+
+  Run `npm run dev:api` to start the mock auth API (port `4011` by default).
+
+  Run `npm run dev` to start the frontend.
+
+  ### OAuth / OTP routes
+
+  - Google callback: `/auth/google/callback`
+  - WhatsApp OTP auth: `/auth/whatsapp`
   

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -12,7 +13,12 @@ interface LoginFormValues {
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, signIn } = useAuth();
+  const { isAuthenticated, signIn, startGoogleOAuth } = useAuth();
+  const fieldWrapperClassName = 'flex w-full flex-col gap-1.5';
+  const fieldLabelClassName = 'text-sm font-medium text-[var(--text-secondary)]';
+  const fieldInputClassName = 'input input-bordered w-full bg-[var(--surface-muted)]';
+  const fieldErrorClassName = 'min-h-4 text-xs text-[var(--error-main)]';
+  const [isGoogleRedirecting, setIsGoogleRedirecting] = useState(false);
 
   const {
     register,
@@ -45,6 +51,25 @@ export function LoginPage() {
     }
   };
 
+  const onGoogleSignIn = () => {
+    try {
+      setIsGoogleRedirecting(true);
+      startGoogleOAuth(redirectPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Impossible de se connecter.';
+      toast.error(message);
+      setIsGoogleRedirecting(false);
+    }
+  };
+
+  const onWhatsAppSignIn = () => {
+    navigate('/auth/whatsapp', {
+      state: {
+        from: redirectPath,
+      },
+    });
+  };
+
   return (
     <AuthShell
       title="Connexion"
@@ -53,34 +78,61 @@ export function LoginPage() {
       footerLinkLabel="Creer un compte"
       footerLinkTo="/auth/register"
     >
-      <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-        <label className="form-control">
-          <span className="label-text text-[var(--text-secondary)]">Email</span>
+      <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
+        <label className={fieldWrapperClassName}>
+          <span className={fieldLabelClassName}>Email</span>
           <input
             type="email"
-            className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+            className={fieldInputClassName}
             placeholder="admin@techsouveraine.io"
             {...register('email', { required: 'Email requis' })}
           />
-          {errors.email ? <span className="mt-1 text-xs text-[var(--error-main)]">{errors.email.message}</span> : null}
+          <span className={fieldErrorClassName}>{errors.email?.message ?? ''}</span>
         </label>
 
-        <label className="form-control">
-          <span className="label-text text-[var(--text-secondary)]">Mot de passe</span>
+        <label className={fieldWrapperClassName}>
+          <span className={fieldLabelClassName}>Mot de passe</span>
           <input
             type="password"
-            className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+            className={fieldInputClassName}
             placeholder="********"
             {...register('password', { required: 'Mot de passe requis', minLength: 6 })}
           />
-          {errors.password ? (
-            <span className="mt-1 text-xs text-[var(--error-main)]">Mot de passe invalide.</span>
-          ) : null}
+          <span className={fieldErrorClassName}>{errors.password ? 'Mot de passe invalide.' : ''}</span>
         </label>
 
-        <button type="submit" className="btn btn-info w-full text-[var(--app-bg)]" disabled={isSubmitting}>
+        <button
+          type="submit"
+          className="btn btn-info w-full text-[var(--app-bg)]"
+          disabled={isSubmitting || isGoogleRedirecting}
+        >
           {isSubmitting ? 'Connexion...' : 'Se connecter'}
         </button>
+
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-[var(--border-soft)]" />
+          <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">ou</span>
+          <span className="h-px flex-1 bg-[var(--border-soft)]" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className="btn btn-outline w-full"
+            disabled={isSubmitting || isGoogleRedirecting}
+            onClick={onGoogleSignIn}
+          >
+            {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline w-full"
+            disabled={isSubmitting || isGoogleRedirecting}
+            onClick={onWhatsAppSignIn}
+          >
+            Continuer avec WhatsApp
+          </button>
+        </div>
       </form>
 
       <p className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--text-secondary)]">

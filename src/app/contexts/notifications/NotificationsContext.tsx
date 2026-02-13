@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import type { AppNotification, ModuleKey, NotificationKind } from '@/app/types';
+import type {
+  AppNotification,
+  ModuleKey,
+  NotificationIdentifierSections,
+  NotificationKind,
+} from '@/app/types';
 import { createId } from '@/app/services';
 
 interface CreateNotificationInput {
@@ -9,6 +14,7 @@ interface CreateNotificationInput {
   kind?: NotificationKind;
   module?: ModuleKey;
   withToast?: boolean;
+  identifierSections?: NotificationIdentifierSections;
 }
 
 interface NotificationsContextValue {
@@ -64,6 +70,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         message: input.message,
         kind: input.kind ?? 'info',
         module: input.module,
+        identifierSections: input.identifierSections,
         read: false,
         createdAt: new Date().toISOString(),
       };

@@ -12,7 +12,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
   const devices = [
     {
       id: 'rfid-badge-device',
-      name: 'Boîtier RFID Badge',
+      name: ' Présence',
       type: 'device',
       category: 'rfid-badge',
       icon: CreditCard,
@@ -20,7 +20,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
       price: 21000,
       description: 'Système de gestion de présence et badges RFID',
       features: [
-        '50 badges RFID inclus',
+        '5 badges RFID inclus',
         'Lecteur haute fréquence',
         'Connexion réseau',
         'Interface web',
@@ -28,7 +28,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
     },
     {
       id: 'rfid-door-device',
-      name: 'Boîtier RFID Porte',
+      name: 'Porte',
       type: 'device',
       category: 'rfid-door',
       icon: DoorOpen,
@@ -44,7 +44,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
     },
     {
       id: 'fingerprint-device',
-      name: 'Boîtier Empreinte Digitale',
+      name: 'Empreinte Digital',
       type: 'device',
       category: 'fingerprint',
       icon: Fingerprint,
@@ -52,7 +52,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
       price: 20000,
       description: 'Reconnaissance biométrique avancée',
       features: [
-        '100 empreintes incluses',
+        '10 empreintes incluses',
         'Capteur haute précision',
         'Temps de réponse < 1s',
         'Anti-falsification',
@@ -60,7 +60,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
     },
     {
       id: 'feedback-device',
-      name: 'Boîtier Feedback',
+      name: 'Feedback',
       type: 'device',
       category: 'feedback',
       icon: MessageSquare,
@@ -68,7 +68,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
       price: 15000,
       description: 'Collecte de satisfaction client',
       features: [
-        '4 boutons personnalisables',
+        '3 boutons personnalisables',
         'Statistiques en temps réel',
         'Écran LED',
         'Batterie autonome',
@@ -79,7 +79,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
   const extensions = [
     {
       id: 'badge-extension-50',
-      name: 'Extension Badges RFID',
+      name: ' Badges RFID',
       type: 'extension',
       category: 'rfid-badge',
       icon: CreditCard,
@@ -90,7 +90,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
     },
     {
       id: 'door-extension',
-      name: 'Extension Portes',
+      name: 'Serrure Portes',
       type: 'extension',
       category: 'rfid-door',
       icon: DoorOpen,
@@ -101,7 +101,7 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
     },
     {
       id: 'fingerprint-extension-50',
-      name: 'Extension Empreintes',
+      name: ' Empreintes',
       type: 'extension',
       category: 'fingerprint',
       icon: Fingerprint,
@@ -185,6 +185,8 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
             <div className="flex items-center justify-between gap-2">
               <button
                 onClick={() => removeFromCart(product.id)}
+                aria-label={`Retirer un ${product.name} du panier`}
+                title={`Retirer un ${product.name} du panier`}
                 className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Minus className="w-4 h-4" />
@@ -192,6 +194,8 @@ export function Marketplace({ onPurchase }: MarketplaceProps) {
               <span className="text-lg font-semibold px-4">{inCart.quantity}</span>
               <button
                 onClick={() => addToCart(product)}
+                aria-label={`Ajouter un ${product.name} au panier`}
+                title={`Ajouter un ${product.name} au panier`}
                 className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Plus className="w-4 h-4" />

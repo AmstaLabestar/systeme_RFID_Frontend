@@ -5,13 +5,15 @@ import {
   Fingerprint,
   History,
   LayoutDashboard,
+  Moon,
   MessageSquare,
+  Sun,
   ShoppingCart,
   UserCircle2,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { BASE_NAV_ITEMS } from '@/app/data';
-import { useMarketplace } from '@/app/contexts';
+import { useAuth, useMarketplace, useThemeMode } from '@/app/contexts';
 import type { DashboardPage } from '@/app/types';
 
 interface SidebarProps {
@@ -29,9 +31,17 @@ const iconMap: Record<DashboardPage, typeof LayoutDashboard> = {
 };
 
 export function Sidebar({ onNavigate }: SidebarProps) {
+  const { user } = useAuth();
   const { isModuleEnabled } = useMarketplace();
+  const { mode, isDark, toggleMode } = useThemeMode();
 
   const visibleItems = BASE_NAV_ITEMS.filter((item) => !item.module || isModuleEnabled(item.module));
+  const userFullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || 'Utilisateur';
+  const userInitials =
+    [user?.firstName?.charAt(0), user?.lastName?.charAt(0)]
+      .filter(Boolean)
+      .join('')
+      .toUpperCase() || 'U';
 
   return (
     <aside className="flex h-full w-72 flex-col border-r border-[var(--border-soft)] bg-[var(--sidebar-bg)] text-[var(--text-primary)]">
@@ -75,8 +85,34 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         </ul>
       </nav>
 
-      <div className="border-t border-[var(--border-soft)] px-6 py-4 text-xs text-[var(--text-secondary)]">
-        Modules actifs selon achats et configuration.
+      <div className="grid gap-4 border-t border-[var(--border-soft)] px-4 py-4">
+        <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--card-bg)]/70 p-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">Profil utilisateur</p>
+          <div className="mt-3 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/15 text-sm font-semibold text-[var(--accent-primary)]">
+              {userInitials}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{userFullName}</p>
+              <p className="truncate text-xs text-[var(--text-secondary)]">{user?.email ?? 'email@inconnu.local'}</p>
+            </div>
+          </div>
+          <p className="mt-2 truncate text-xs text-[var(--text-secondary)]">{user?.company ?? 'Workspace'}</p>
+        </div>
+
+        <button
+          type="button"
+          className="btn btn-outline btn-sm w-full justify-between border-[var(--border-soft)]"
+          onClick={toggleMode}
+          aria-label="Changer le theme"
+        >
+          <span className="text-xs font-medium uppercase tracking-[0.12em]">
+            Theme: {mode === 'dark' ? 'sombre' : 'clair'}
+          </span>
+          {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+        </button>
+
+        <p className="px-2 text-xs text-[var(--text-secondary)]">Modules actifs selon achats et configuration.</p>
       </div>
     </aside>
   );

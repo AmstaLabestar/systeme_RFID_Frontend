@@ -16,6 +16,8 @@ export function MarketplacePage() {
     devices,
     isPurchasing,
     purchaseProduct,
+    getProductRemainingStock,
+    isProductSoldOut,
   } = useMarketplace();
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -32,6 +34,11 @@ export function MarketplacePage() {
   const getQuantity = (productId: string): number => quantities[productId] ?? 1;
 
   const handlePurchase = async (productId: string) => {
+    if (isProductSoldOut(productId)) {
+      toast.error('Ce materiel est deja epuise dans le mock et ne peut plus etre achete.');
+      return;
+    }
+
     const quantity = getQuantity(productId);
 
     try {
@@ -48,7 +55,7 @@ export function MarketplacePage() {
     <div className="space-y-6">
       <PageHeader
         title="Marketplace"
-        description="Point d entree unique: chaque achat provisionne automatiquement boitiers, capacites et identifiants."
+        description="Point d entree unique: chaque achat provisionne boitiers et identifiants. Activation finale via MAC obligatoire."
       />
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -80,6 +87,11 @@ export function MarketplacePage() {
           {deviceProducts.map((product) => (
             <article key={product.id} className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
               <div className="card-body p-5">
+                {product.apiSku ? (
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                    Ref materiel: {product.apiSku}
+                  </p>
+                ) : null}
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-base font-semibold text-[var(--text-primary)]">{product.label}</h3>
                   <span className="badge badge-info badge-outline">{MODULE_LABELS[product.module]}</span>
@@ -90,18 +102,31 @@ export function MarketplacePage() {
                   identifiants
                 </div>
                 <p className="text-2xl font-bold text-[var(--text-primary)]">{formatCurrencyFcfa(product.unitPrice)}</p>
+                {getProductRemainingStock(product.id) !== null ? (
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Stock mock restant: <span className="font-semibold">{getProductRemainingStock(product.id)}</span>
+                  </p>
+                ) : null}
 
                 <label className="form-control">
                   <span className="label-text text-xs text-[var(--text-secondary)]">Quantite</span>
                   <input
                     type="number"
                     min={1}
+                    max={getProductRemainingStock(product.id) ?? undefined}
                     value={getQuantity(product.id)}
                     className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+                    disabled={isProductSoldOut(product.id)}
                     onChange={(event) =>
                       setQuantities((current) => ({
                         ...current,
-                        [product.id]: Math.max(1, Number(event.target.value) || 1),
+                        [product.id]: Math.max(
+                          1,
+                          Math.min(
+                            Number(event.target.value) || 1,
+                            getProductRemainingStock(product.id) ?? Number.MAX_SAFE_INTEGER,
+                          ),
+                        ),
                       }))
                     }
                   />
@@ -110,11 +135,11 @@ export function MarketplacePage() {
                 <button
                   type="button"
                   className="btn btn-info mt-2 text-[var(--app-bg)]"
-                  disabled={isPurchasing}
+                  disabled={isPurchasing || isProductSoldOut(product.id)}
                   onClick={() => handlePurchase(product.id)}
                 >
                   <ShoppingBag className="h-4 w-4" />
-                  Acheter maintenant
+                  {isProductSoldOut(product.id) ? 'Stock epuise' : 'Acheter maintenant'}
                 </button>
               </div>
             </article>

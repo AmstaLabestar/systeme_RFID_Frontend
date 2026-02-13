@@ -1,0 +1,49 @@
+{
+  "users": [
+    {
+      "id": "usr-07cd720f-f06f-4359-a210-70bc5e963390",
+      "firstName": "Ami",
+      "lastName": "Bikienga",
+      "company": "Labestar",
+      "email": "labestar04@gmail.com",
+      "password": "12345678"
+    },
+    {
+      "id": "usr-wa-97ae942f-2848-4902-be60-521d16431358",
+      "firstName": "Bikienga",
+      "lastName": "Hamza",
+      "company": "Tanga Group",
+      "email": "hamzabikienga07@gmail.com",
+      "password": "12345678",
+      "phone": "+22670321860"
+    },
+    {
+      "id": "usr-admin",
+      "firstName": "Admin",
+      "lastName": "SaaS",
+      "company": "Tech Souveraine",
+      "email": "admin@techsouveraine.io",
+      "password": "demo12345"
+    }
+  ],
+  "otpRequests": [
+    {
+      "id": "otp-509b61e1-4e86-481c-94eb-40235d1c447d",
+      "phone": "+2250700000000",
+      "code": "707803",
+      "createdAt": "2026-02-13T09:14:43.821Z",
+      "expiresAt": "2026-02-13T09:19:43.821Z",
+      "consumed": true,
+      "verifiedAt": "2026-02-13T09:14:43.845Z"
+    },
+    {
+      "id": "otp-44104d41-da52-4ec9-9d98-48fa5ae0b435",
+      "phone": "+2250700000000",
+      "code": "130347",
+      "createdAt": "2026-02-13T09:12:41.838Z",
+      "expiresAt": "2026-02-13T09:17:41.838Z",
+      "consumed": true,
+      "verifiedAt": "2026-02-13T09:12:41.857Z"
+    }
+  ]
+}

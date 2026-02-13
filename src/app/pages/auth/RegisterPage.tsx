@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -15,7 +16,12 @@ interface RegisterFormValues {
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, signUp } = useAuth();
+  const { isAuthenticated, signUp, startGoogleOAuth } = useAuth();
+  const fieldWrapperClassName = 'flex w-full flex-col gap-1.5';
+  const fieldLabelClassName = 'text-sm font-medium text-[var(--text-secondary)]';
+  const fieldInputClassName = 'input input-bordered w-full bg-[var(--surface-muted)]';
+  const fieldErrorClassName = 'min-h-4 text-xs text-[var(--error-main)]';
+  const [isGoogleRedirecting, setIsGoogleRedirecting] = useState(false);
 
   const {
     register,
@@ -47,6 +53,25 @@ export function RegisterPage() {
     }
   };
 
+  const onGoogleSignIn = () => {
+    try {
+      setIsGoogleRedirecting(true);
+      startGoogleOAuth('/dashboard/overview');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Impossible de se connecter.';
+      toast.error(message);
+      setIsGoogleRedirecting(false);
+    }
+  };
+
+  const onWhatsAppSignIn = () => {
+    navigate('/auth/whatsapp', {
+      state: {
+        from: '/dashboard/overview',
+      },
+    });
+  };
+
   return (
     <AuthShell
       title="Inscription"
@@ -57,56 +82,50 @@ export function RegisterPage() {
     >
       <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="form-control">
-            <span className="label-text text-[var(--text-secondary)]">Prenom</span>
+          <label className={fieldWrapperClassName}>
+            <span className={fieldLabelClassName}>Prenom</span>
             <input
-              className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+              className={fieldInputClassName}
               {...register('firstName', { required: 'Prenom requis' })}
             />
-            {errors.firstName ? (
-              <span className="mt-1 text-xs text-[var(--error-main)]">{errors.firstName.message}</span>
-            ) : null}
+            <span className={fieldErrorClassName}>{errors.firstName?.message ?? ''}</span>
           </label>
 
-          <label className="form-control">
-            <span className="label-text text-[var(--text-secondary)]">Nom</span>
+          <label className={fieldWrapperClassName}>
+            <span className={fieldLabelClassName}>Nom</span>
             <input
-              className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+              className={fieldInputClassName}
               {...register('lastName', { required: 'Nom requis' })}
             />
-            {errors.lastName ? (
-              <span className="mt-1 text-xs text-[var(--error-main)]">{errors.lastName.message}</span>
-            ) : null}
+            <span className={fieldErrorClassName}>{errors.lastName?.message ?? ''}</span>
           </label>
         </div>
 
-        <label className="form-control">
-          <span className="label-text text-[var(--text-secondary)]">Entreprise</span>
+        <label className={fieldWrapperClassName}>
+          <span className={fieldLabelClassName}>Entreprise</span>
           <input
-            className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+            className={fieldInputClassName}
             {...register('company', { required: 'Entreprise requise' })}
           />
-          {errors.company ? (
-            <span className="mt-1 text-xs text-[var(--error-main)]">{errors.company.message}</span>
-          ) : null}
+          <span className={fieldErrorClassName}>{errors.company?.message ?? ''}</span>
         </label>
 
-        <label className="form-control">
-          <span className="label-text text-[var(--text-secondary)]">Email</span>
+        <label className={fieldWrapperClassName}>
+          <span className={fieldLabelClassName}>Email</span>
           <input
             type="email"
-            className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+            className={fieldInputClassName}
             {...register('email', { required: 'Email requis' })}
           />
-          {errors.email ? <span className="mt-1 text-xs text-[var(--error-main)]">{errors.email.message}</span> : null}
+          <span className={fieldErrorClassName}>{errors.email?.message ?? ''}</span>
         </label>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="form-control">
-            <span className="label-text text-[var(--text-secondary)]">Mot de passe</span>
+          <label className={fieldWrapperClassName}>
+            <span className={fieldLabelClassName}>Mot de passe</span>
             <input
               type="password"
-              className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+              className={fieldInputClassName}
               {...register('password', {
                 required: 'Mot de passe requis',
                 minLength: {
@@ -115,30 +134,55 @@ export function RegisterPage() {
                 },
               })}
             />
-            {errors.password ? (
-              <span className="mt-1 text-xs text-[var(--error-main)]">{errors.password.message}</span>
-            ) : null}
+            <span className={fieldErrorClassName}>{errors.password?.message ?? ''}</span>
           </label>
 
-          <label className="form-control">
-            <span className="label-text text-[var(--text-secondary)]">Confirmer</span>
+          <label className={fieldWrapperClassName}>
+            <span className={fieldLabelClassName}>Confirmer</span>
             <input
               type="password"
-              className="input input-bordered mt-1 bg-[var(--surface-muted)]"
+              className={fieldInputClassName}
               {...register('confirmPassword', {
                 required: 'Confirmation requise',
                 validate: (value) => value === passwordValue || 'Mots de passe differents',
               })}
             />
-            {errors.confirmPassword ? (
-              <span className="mt-1 text-xs text-[var(--error-main)]">{errors.confirmPassword.message}</span>
-            ) : null}
+            <span className={fieldErrorClassName}>{errors.confirmPassword?.message ?? ''}</span>
           </label>
         </div>
 
-        <button type="submit" className="btn btn-info mt-2 w-full text-[var(--app-bg)]" disabled={isSubmitting}>
+        <button
+          type="submit"
+          className="btn btn-info mt-2 w-full text-[var(--app-bg)]"
+          disabled={isSubmitting || isGoogleRedirecting}
+        >
           {isSubmitting ? 'Creation...' : 'Creer mon compte'}
         </button>
+
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-[var(--border-soft)]" />
+          <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">ou</span>
+          <span className="h-px flex-1 bg-[var(--border-soft)]" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className="btn btn-outline w-full"
+            disabled={isSubmitting || isGoogleRedirecting}
+            onClick={onGoogleSignIn}
+          >
+            {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline w-full"
+            disabled={isSubmitting || isGoogleRedirecting}
+            onClick={onWhatsAppSignIn}
+          >
+            Continuer avec WhatsApp
+          </button>
+        </div>
       </form>
     </AuthShell>
   );

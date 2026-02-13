@@ -32,6 +32,7 @@ interface ServicesContextValue {
   reassignIdentifier: (input: ReassignIdentifierInput) => void;
   getAssignmentsByModule: (module: ModuleKey) => ServiceAssignment[];
   getHistoryByModule: (module?: ModuleKey) => HistoryEvent[];
+  getHistoryByDevice: (deviceId: string, module?: ModuleKey) => HistoryEvent[];
   getEmployeeById: (employeeId: string) => Employee | undefined;
 }
 
@@ -163,6 +164,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
 
       appendHistory({
         module: input.module,
+        deviceId: device.id,
         employee: employee.fullName,
         identifier: assignedIdentifier.code,
         device: device.name,
@@ -203,6 +205,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
 
       appendHistory({
         module: assignment.module,
+        deviceId: device.id,
         employee: employee.fullName,
         identifier: identifier.code,
         device: device.name,
@@ -277,6 +280,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
 
       appendHistory({
         module: existingAssignment.module,
+        deviceId: targetDevice.id,
         employee: employee.fullName,
         identifier: reassignedIdentifier.code,
         device: targetDevice.name,
@@ -320,6 +324,12 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     [history],
   );
 
+  const getHistoryByDevice = useCallback(
+    (deviceId: string, module?: ModuleKey): HistoryEvent[] =>
+      history.filter((entry) => entry.deviceId === deviceId && (!module || entry.module === module)),
+    [history],
+  );
+
   const getEmployeeById = useCallback(
     (employeeId: string): Employee | undefined => employees.find((employee) => employee.id === employeeId),
     [employees],
@@ -336,6 +346,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       reassignIdentifier,
       getAssignmentsByModule,
       getHistoryByModule,
+      getHistoryByDevice,
       getEmployeeById,
     }),
     [
@@ -348,6 +359,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       reassignIdentifier,
       getAssignmentsByModule,
       getHistoryByModule,
+      getHistoryByDevice,
       getEmployeeById,
     ],
   );

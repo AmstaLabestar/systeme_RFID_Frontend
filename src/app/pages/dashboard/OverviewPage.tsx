@@ -47,9 +47,9 @@ export function OverviewPage() {
           icon={CheckCircle2}
         />
         <MetricCard
-          title="Boitiers a configurer"
+          title="Boitiers a activer"
           value={pendingDevices.length}
-          hint="Services non visibles tant que non configures"
+          hint="Services visibles mais inactifs tant que non lies par MAC"
           tone={pendingDevices.length > 0 ? 'negative' : 'default'}
           icon={ShieldAlert}
         />
@@ -129,12 +129,13 @@ export function OverviewPage() {
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">Boitiers en attente</h2>
               <div className="mt-3 space-y-3">
                 {pendingDevices.length === 0 && (
-                  <p className="text-sm text-[var(--text-secondary)]">Tous les boitiers sont configures.</p>
+                  <p className="text-sm text-[var(--text-secondary)]">Tous les boitiers sont actives.</p>
                 )}
                 {pendingDevices.map((device) => (
                   <div key={device.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
                     <p className="text-sm font-semibold text-[var(--text-primary)]">{device.name}</p>
                     <p className="text-xs text-[var(--text-secondary)]">Module: {device.module}</p>
+                    <p className="text-xs text-[var(--warning-main)]">Activation MAC requise</p>
                   </div>
                 ))}
               </div>

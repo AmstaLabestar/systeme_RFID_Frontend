@@ -1,5 +1,7 @@
 import type { DashboardNavItem, IdentifierType, ModuleKey, Product } from '@/app/types';
 
+const MOCK_DEVICE_STOCK = 100;
+
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   'rfid-presence': 'RFID Presence',
   'rfid-porte': 'RFID Porte',
@@ -23,41 +25,49 @@ export const IDENTIFIER_LABELS: Record<IdentifierType, string> = {
 export const DEVICE_PRODUCTS: Product[] = [
   {
     id: 'device-rfid-presence',
+    apiSku: 'HW-RFP-001',
     kind: 'device',
     module: 'rfid-presence',
     identifierType: 'badge-rfid',
     label: 'Boitier RFID Presence',
     description: 'Unite centrale de gestion de presence et badges RFID.',
     unitPrice: 21000,
+    stockLimit: MOCK_DEVICE_STOCK,
     includedIdentifiers: 5,
   },
   {
     id: 'device-rfid-porte',
+    apiSku: 'HW-RFD-001',
     kind: 'device',
     module: 'rfid-porte',
     identifierType: 'serrure-rfid',
     label: 'Boitier RFID Porte',
     description: 'Unite centrale de controle d acces des portes.',
     unitPrice: 20000,
+    stockLimit: MOCK_DEVICE_STOCK,
     includedIdentifiers: 5,
   },
   {
     id: 'device-biometrie',
+    apiSku: 'HW-BIO-001',
     kind: 'device',
     module: 'biometrie',
     identifierType: 'empreinte',
     label: 'Boitier Empreinte Digitale',
     description: 'Unite centrale de reconnaissance biometrique.',
     unitPrice: 20000,
+    stockLimit: MOCK_DEVICE_STOCK,
     includedIdentifiers: 5,
   },
   {
     id: 'device-feedback',
+    apiSku: 'HW-FBK-001',
     kind: 'device',
     module: 'feedback',
     label: 'Boitier Feedback',
     description: 'Boitier a 3 boutons (negatif, neutre, positif) pour la satisfaction.',
     unitPrice: 15000,
+    stockLimit: MOCK_DEVICE_STOCK,
     includedIdentifiers: 0,
   },
 ];
@@ -65,6 +75,7 @@ export const DEVICE_PRODUCTS: Product[] = [
 export const IDENTIFIER_PRODUCTS: Product[] = [
   {
     id: 'pack-badge-rfid',
+    apiSku: 'PK-BAD-010',
     kind: 'identifier-pack',
     module: 'rfid-presence',
     identifierType: 'badge-rfid',
@@ -75,6 +86,7 @@ export const IDENTIFIER_PRODUCTS: Product[] = [
   },
   {
     id: 'pack-empreinte',
+    apiSku: 'PK-BIO-010',
     kind: 'identifier-pack',
     module: 'biometrie',
     identifierType: 'empreinte',
@@ -85,6 +97,7 @@ export const IDENTIFIER_PRODUCTS: Product[] = [
   },
   {
     id: 'pack-serrure-rfid',
+    apiSku: 'PK-SER-010',
     kind: 'identifier-pack',
     module: 'rfid-porte',
     identifierType: 'serrure-rfid',

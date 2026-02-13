@@ -1,17 +1,18 @@
 import type { Employee, FeedbackRecord, HistoryEvent, ModuleKey } from '@/app/types';
 
 export const seedEmployees: Employee[] = [
-  { id: 'emp-1', firstName: 'Aminata', lastName: 'Sarr', fullName: 'Aminata Sarr' },
-  { id: 'emp-2', firstName: 'Ibrahima', lastName: 'Diallo', fullName: 'Ibrahima Diallo' },
-  { id: 'emp-3', firstName: 'Moussa', lastName: 'Ndiaye', fullName: 'Moussa Ndiaye' },
-  { id: 'emp-4', firstName: 'Fatou', lastName: 'Traore', fullName: 'Fatou Traore' },
+  { id: 'emp-1', firstName: 'Aminata', lastName: 'Diarra', fullName: 'Aminata Diarra' },
+  { id: 'emp-2', firstName: 'Ibrahim', lastName: 'Diallo', fullName: 'Ibrahim Diallo' },
+  { id: 'emp-3', firstName: 'Moussa', lastName: 'Sana', fullName: 'Moussa Sana' },
+  { id: 'emp-4', firstName: 'Fati', lastName: 'Bikienga', fullName: 'Fati Bikienga' },
 ];
 
 export const seedHistory: HistoryEvent[] = [
   {
     id: 'hist-seed-1',
     module: 'rfid-presence',
-    employee: 'Aminata Sarr',
+    deviceId: 'seed-device-rfid-presence-1',
+    employee: 'Aminata Diarra',
     identifier: 'BAD-1001',
     device: 'Boitier Presence #1',
     action: 'Entree employee',
@@ -20,7 +21,8 @@ export const seedHistory: HistoryEvent[] = [
   {
     id: 'hist-seed-2',
     module: 'rfid-porte',
-    employee: 'Ibrahima Diallo',
+    deviceId: 'seed-device-rfid-porte-1',
+    employee: 'Ibrahim Diallo',
     identifier: 'SER-2001',
     device: 'Boitier Porte #1',
     action: 'Ouverture porte principale',
@@ -29,7 +31,8 @@ export const seedHistory: HistoryEvent[] = [
   {
     id: 'hist-seed-3',
     module: 'biometrie',
-    employee: 'Moussa Ndiaye',
+    deviceId: 'seed-device-biometrie-1',
+    employee: 'Moussa Sana',
     identifier: 'EMP-3001',
     device: 'Boitier Biometrie #1',
     action: 'Verification biometrie reussie',

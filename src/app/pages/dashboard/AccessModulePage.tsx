@@ -1,12 +1,19 @@
-import { ArrowRightLeft, Trash2 } from 'lucide-react';
+import { ArrowRightLeft, Download, History, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { MODULE_LABELS } from '@/app/data';
 import { useMarketplace, useServices } from '@/app/contexts';
-import { formatDateTime } from '@/app/services';
+import { downloadDeviceHistoryPdf, formatDateTime } from '@/app/services';
 import type { ModuleKey } from '@/app/types';
-import { DeviceSetupCard, EmptyState, PageHeader } from '@/app/shared/components';
+import {
+  DeviceHistoryDialog,
+  DeviceSetupCard,
+  EmptyState,
+  PageHeader,
+  type DeviceHistoryDialogEntry,
+} from '@/app/shared/components';
 import { moduleContent } from './moduleConfig';
 
 interface AccessModulePageProps {
@@ -23,6 +30,7 @@ interface AssignmentFormValues {
 export function AccessModulePage({ module }: AccessModulePageProps) {
   const navigate = useNavigate();
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
+  const [historyDeviceId, setHistoryDeviceId] = useState<string | null>(null);
 
   const {
     devices,
@@ -38,6 +46,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     reassignIdentifier,
     getAssignmentsByModule,
     getEmployeeById,
+    getHistoryByDevice,
     getHistoryByModule,
   } = useServices();
 
@@ -50,6 +59,25 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   const availableIdentifiers = getAvailableIdentifiersByModule(module);
   const moduleAssignments = getAssignmentsByModule(module);
   const moduleHistory = getHistoryByModule(module).slice(0, 25);
+
+  const selectedHistoryDevice = useMemo(
+    () => configuredDevices.find((device) => device.id === historyDeviceId) ?? null,
+    [configuredDevices, historyDeviceId],
+  );
+
+  const selectedDeviceHistory = useMemo<ReadonlyArray<DeviceHistoryDialogEntry>>(
+    () =>
+      selectedHistoryDevice
+        ? getHistoryByDevice(selectedHistoryDevice.id, module).map((entry) => ({
+            id: entry.id,
+            occurredAt: entry.occurredAt,
+            actor: entry.employee,
+            identifier: entry.identifier,
+            action: entry.action,
+          }))
+        : [],
+    [selectedHistoryDevice, getHistoryByDevice, module],
+  );
 
   const {
     register,
@@ -104,12 +132,17 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     setValue('identifierId', editingAssignment.identifierId);
   }, [editingAssignment, getEmployeeById, setValue]);
 
-  const handleConfigureDevice = (deviceId: string, values: { name: string; location: string }) => {
+  const handleConfigureDevice = async (
+    deviceId: string,
+    values: { name: string; location: string; systemIdentifier: string },
+  ): Promise<boolean> => {
     try {
-      configureDevice(deviceId, values);
+      await configureDevice(deviceId, values);
+      return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Configuration impossible.';
+      const message = error instanceof Error ? error.message : 'Activation impossible.';
       toast.error(message);
+      return false;
     }
   };
 
@@ -163,6 +196,38 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     }
   };
 
+  const handleDownloadDeviceHistoryPdf = (
+    deviceId: string,
+    options?: { forceCloseAfterExport?: boolean },
+  ) => {
+    const device = configuredDevices.find((candidate) => candidate.id === deviceId);
+
+    if (!device) {
+      toast.error('Boitier introuvable.');
+      return;
+    }
+
+    const entries = getHistoryByDevice(device.id, module).map((entry) => ({
+      occurredAt: entry.occurredAt,
+      actor: entry.employee,
+      identifier: entry.identifier,
+      action: entry.action,
+    }));
+
+    downloadDeviceHistoryPdf({
+      moduleLabel: MODULE_LABELS[module],
+      deviceName: device.name,
+      deviceId: device.id,
+      systemIdentifier: device.systemIdentifier,
+      generatedAt: new Date().toISOString(),
+      entries,
+    });
+
+    if (options?.forceCloseAfterExport) {
+      setHistoryDeviceId(null);
+    }
+  };
+
   if (moduleDevices.length === 0) {
     return (
       <div className="space-y-6">
@@ -194,7 +259,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
       {pendingDevices.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--warning-main)]">Configuration des boitiers</h2>
+          <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--warning-main)]">Activation des boitiers</h2>
           <div className="grid gap-4">
             {pendingDevices.map((device) => (
               <DeviceSetupCard key={device.id} device={device} onConfigure={handleConfigureDevice} />
@@ -205,8 +270,8 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
       {configuredDevices.length === 0 ? (
         <EmptyState
-          title="Configuration requise"
-          description="Finalisez au moins un boitier pour activer ce service dans la sidebar et demarrer les assignations."
+          title="Activation requise"
+          description="Activez au moins un boitier avec son identifiant systeme (MAC) pour utiliser ce service."
         />
       ) : (
         <>
@@ -222,7 +287,10 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                   <div className="card-body p-5">
                     <h3 className="text-base font-semibold text-[var(--text-primary)]">{device.name}</h3>
                     <p className="text-xs text-[var(--text-secondary)]">{device.location}</p>
-                    <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
+                    <p className="mt-1 font-mono text-xs text-[var(--accent-primary)]">
+                      MAC: {device.systemIdentifier ?? 'N/A'}
+                    </p>
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                         <p className="text-[var(--text-secondary)]">Capacite</p>
                         <p className="text-lg font-bold text-[var(--text-primary)]">{capacity}</p>
@@ -235,6 +303,25 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                         <p className="text-[var(--text-secondary)]">Restants</p>
                         <p className="text-lg font-bold text-[var(--accent-primary)]">{Math.max(capacity - assigned, 0)}</p>
                       </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-outline"
+                        onClick={() => setHistoryDeviceId(device.id)}
+                      >
+                        <History className="h-3 w-3" />
+                        Historique
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-outline btn-info"
+                        onClick={() => handleDownloadDeviceHistoryPdf(device.id)}
+                      >
+                        <Download className="h-3 w-3" />
+                        PDF
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -442,6 +529,20 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
           </section>
         </>
       )}
+
+      {selectedHistoryDevice ? (
+        <DeviceHistoryDialog
+          moduleLabel={MODULE_LABELS[module]}
+          deviceName={selectedHistoryDevice.name}
+          deviceId={selectedHistoryDevice.id}
+          systemIdentifier={selectedHistoryDevice.systemIdentifier}
+          entries={[...selectedDeviceHistory]}
+          onClose={() => setHistoryDeviceId(null)}
+          onDownloadPdf={() =>
+            handleDownloadDeviceHistoryPdf(selectedHistoryDevice.id, { forceCloseAfterExport: false })
+          }
+        />
+      ) : null}
     </div>
   );
 }

@@ -4,16 +4,19 @@ import {
   MarketplaceProvider,
   NotificationsProvider,
   ServicesProvider,
+  ThemeProvider,
 } from '@/app/contexts';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider>
-      <NotificationsProvider>
-        <MarketplaceProvider>
-          <ServicesProvider>{children}</ServicesProvider>
-        </MarketplaceProvider>
-      </NotificationsProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <NotificationsProvider>
+          <MarketplaceProvider>
+            <ServicesProvider>{children}</ServicesProvider>
+          </MarketplaceProvider>
+        </NotificationsProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

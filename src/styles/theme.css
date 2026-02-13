@@ -11,6 +11,25 @@
   --text-primary: #e6f1ff;
   --text-secondary: #8892b0;
   --border-soft: rgba(136, 146, 176, 0.28);
+  --bg-glow-top: rgba(0, 191, 255, 0.12);
+  --bg-glow-bottom: rgba(0, 230, 118, 0.08);
+}
+
+:root[data-theme='light'] {
+  --app-bg: #f4f8ff;
+  --card-bg: #ffffff;
+  --sidebar-bg: #e9f1ff;
+  --surface-muted: rgba(206, 223, 248, 0.6);
+  --surface-veil: rgba(244, 248, 255, 0.86);
+  --accent-primary: #0065d1;
+  --success-main: #078c52;
+  --warning-main: #b56a00;
+  --error-main: #d93838;
+  --text-primary: #12203d;
+  --text-secondary: #4a5b7b;
+  --border-soft: rgba(84, 107, 148, 0.24);
+  --bg-glow-top: rgba(0, 101, 209, 0.16);
+  --bg-glow-bottom: rgba(7, 140, 82, 0.09);
 }
 
 @layer base {
@@ -27,8 +46,8 @@
   body {
     margin: 0;
     background:
-      radial-gradient(circle at top right, rgba(0, 191, 255, 0.12), transparent 35%),
-      radial-gradient(circle at bottom left, rgba(0, 230, 118, 0.08), transparent 30%),
+      radial-gradient(circle at top right, var(--bg-glow-top), transparent 35%),
+      radial-gradient(circle at bottom left, var(--bg-glow-bottom), transparent 30%),
       var(--app-bg);
     color: var(--text-primary);
     font-family: 'Space Grotesk', 'Manrope', 'Segoe UI', sans-serif;

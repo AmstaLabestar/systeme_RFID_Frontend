@@ -23,12 +23,14 @@ export interface AuthUser {
 
 export interface Product {
   id: string;
+  apiSku?: string;
   kind: ProductKind;
   module: ModuleKey;
   identifierType?: IdentifierType;
   label: string;
   description: string;
   unitPrice: number;
+  stockLimit?: number;
   includedIdentifiers?: number;
   quantityPerPack?: number;
 }
@@ -38,9 +40,12 @@ export interface DeviceUnit {
   module: ModuleKey;
   name: string;
   location: string;
+  provisionedMacAddress: string;
+  systemIdentifier?: string;
   configured: boolean;
   capacity: number;
   createdAt: string;
+  activatedAt?: string;
 }
 
 export interface InventoryIdentifier {
@@ -74,6 +79,7 @@ export interface ServiceAssignment {
 export interface HistoryEvent {
   id: string;
   module: ModuleKey;
+  deviceId: string;
   employee: string;
   identifier: string;
   device: string;
@@ -93,6 +99,11 @@ export interface FeedbackRecord {
 
 export type NotificationKind = 'success' | 'info' | 'warning' | 'error';
 
+export interface NotificationIdentifierSections {
+  deviceIdentifiers: string[];
+  extensionIdentifiers: string[];
+}
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -101,6 +112,7 @@ export interface AppNotification {
   read: boolean;
   kind: NotificationKind;
   module?: ModuleKey;
+  identifierSections?: NotificationIdentifierSections;
 }
 
 export interface PurchaseResult {
@@ -120,6 +132,7 @@ export interface DashboardNavItem {
 export interface DeviceConfigurationInput {
   name: string;
   location: string;
+  systemIdentifier: string;
 }
 
 export interface AssignIdentifierInput {

@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/app/contexts';
 import { DashboardLayout } from '@/app/layout';
-import { LoginPage, RegisterPage } from '@/app/pages/auth';
+import { GoogleCallbackPage, LoginPage, RegisterPage, WhatsAppOtpPage } from '@/app/pages/auth';
 import {
   BiometriePage,
   FeedbackPage,
@@ -39,6 +39,8 @@ export function AppRouter() {
 
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/register" element={<RegisterPage />} />
+        <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+        <Route path="/auth/whatsapp" element={<WhatsAppOtpPage />} />
 
         <Route element={<PrivateRoute />}>
           <Route path="/dashboard" element={<DashboardLayout />}>
