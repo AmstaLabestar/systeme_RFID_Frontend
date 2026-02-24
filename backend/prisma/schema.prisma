@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  MAGIC_LINK
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String   @unique
+  users     User[]
+  roles     Role[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([domain])
+  @@map("tenants")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String
+  permissions Json
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([name])
+  @@map("roles")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  name          String
+  email         String         @unique
+  phoneNumber   String?        @unique
+  passwordHash  String?
+  googleId      String?        @unique
+  provider      AuthProvider   @default(LOCAL)
+  isTwoFactorEnabled Boolean   @default(false)
+  twoFactorSecretEncrypted String?
+  twoFactorSecretIv String?
+  twoFactorSecretTag String?
+  twoFactorSecretHash String?
+  roleId        String
+  tenantId      String
+  role          Role           @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  refreshTokens RefreshToken[]
+  magicLinkTokens MagicLinkToken[]
+  marketplaceState MarketplaceState?
+  servicesState ServicesState?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([email])
+  @@index([phoneNumber])
+  @@index([googleId])
+  @@index([tenantId, roleId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id                String    @id @default(uuid())
+  jti               String    @unique
+  tokenHash         String
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model MagicLinkToken {
+  id         String   @id @default(uuid())
+  jti        String   @unique
+  tokenHash  String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@map("magic_link_tokens")
+}
+
+model MarketplaceState {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productStockById Json
+  devices          Json
+  inventory        Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("marketplace_states")
+}
+
+model ServicesState {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employees       Json
+  assignments     Json
+  history         Json
+  feedbackRecords Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("services_states")
+}
