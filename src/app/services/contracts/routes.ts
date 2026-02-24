@@ -11,10 +11,19 @@ export const AUTH_ROUTES = {
 } as const;
 
 export const MARKETPLACE_ROUTES = {
-  catalog: '/marketplace/catalog',
-  state: '/marketplace/state',
-  purchases: '/marketplace/purchases',
-  activateDevice: (deviceId: string) => `/marketplace/devices/${deviceId}/activate`,
+  systems: '/marketplace/systems',
+  state: '/devices/my',
+  orders: '/marketplace/orders',
+  activateDevice: (deviceId: string) => `/devices/${deviceId}/configure`,
+} as const;
+
+export const ADMIN_ROUTES = {
+  systems: '/admin/systems',
+  createSystem: '/admin/systems',
+  updateSystemActivation: (systemId: string) => `/admin/systems/${systemId}/activation`,
+  createDevicesBulk: (systemId: string) => `/admin/systems/${systemId}/devices/bulk`,
+  createSystemIdentifiersBulk: (systemId: string) => `/admin/systems/${systemId}/identifiers/bulk`,
+  createDeviceIdentifiers: (deviceId: string) => `/admin/devices/${deviceId}/identifiers`,
 } as const;
 
 export const SERVICES_ROUTES = {

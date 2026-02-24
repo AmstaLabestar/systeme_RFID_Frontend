@@ -1,4 +1,5 @@
 export * from './accessService';
+export * from './adminService';
 export * from './authService';
 export * from './contracts';
 export * from './httpClient';

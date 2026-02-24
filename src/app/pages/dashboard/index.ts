@@ -1,4 +1,5 @@
 export * from './AccessModulePage';
+export * from './AdminStockPage';
 export * from './BiometriePage';
 export * from './FeedbackPage';
 export * from './HistoriquePage';

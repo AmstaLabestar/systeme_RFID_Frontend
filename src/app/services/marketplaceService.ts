@@ -24,32 +24,89 @@ export interface ActivateDeviceResponse {
   marketplaceState: MarketplaceStatePayload;
 }
 
+interface MarketplaceSystemStock {
+  code?: string;
+  availableDevices?: number;
+  availableExtensions?: number;
+}
+
+function getStockMapFromSystems(catalog: Product[], rawSystems: unknown): Record<string, number | null> {
+  const systems = Array.isArray(rawSystems) ? (rawSystems as MarketplaceSystemStock[]) : [];
+  const stockByProductId = new Map<string, number>();
+
+  systems.forEach((system) => {
+    const normalizedCode = String(system.code ?? '').trim().toLowerCase();
+    const moduleByCode: Record<string, ModuleKey> = {
+      rfid_presence: 'rfid-presence',
+      rfid_porte: 'rfid-porte',
+      biometrie: 'biometrie',
+      feedback: 'feedback',
+    };
+    const module = moduleByCode[normalizedCode];
+    if (!module) {
+      return;
+    }
+
+    stockByProductId.set(`device-${module}`, Math.max(Number(system.availableDevices ?? 0), 0));
+    if (module !== 'feedback') {
+      stockByProductId.set(
+        `identifier-extension-${module}`,
+        Math.max(Number(system.availableExtensions ?? 0), 0),
+      );
+    }
+  });
+
+  return catalog.reduce<Record<string, number | null>>((accumulator, product) => {
+    const stock = stockByProductId.get(product.id);
+    accumulator[product.id] = typeof stock === 'number' ? stock : null;
+    return accumulator;
+  }, {});
+}
+
 export const marketplaceService = {
   async fetchCatalog(): Promise<Product[]> {
     try {
-      const response = await systemApiClient.get<unknown>(MARKETPLACE_ROUTES.catalog);
+      const response = await systemApiClient.get<unknown>(MARKETPLACE_ROUTES.systems);
       return toProductList(response.data);
     } catch (error) {
-      throw new Error(toApiErrorMessage(error, 'Impossible de charger le catalogue.'));
+      throw new Error(toApiErrorMessage(error, 'Impossible de charger les systemes du marketplace.'));
     }
   },
 
   async fetchMarketplaceState(): Promise<MarketplaceStatePayload> {
     try {
-      const response = await systemApiClient.get<unknown>(MARKETPLACE_ROUTES.state);
-      return toMarketplaceState(response.data);
+      const [catalogResponse, devicesResponse] = await Promise.all([
+        systemApiClient.get<unknown>(MARKETPLACE_ROUTES.systems),
+        systemApiClient.get<unknown>(MARKETPLACE_ROUTES.state),
+      ]);
+      const catalog = toProductList(catalogResponse.data);
+      const state = toMarketplaceState(devicesResponse.data);
+
+      return {
+        ...state,
+        productStockById: getStockMapFromSystems(catalog, catalogResponse.data),
+      };
     } catch (error) {
-      throw new Error(toApiErrorMessage(error, 'Impossible de charger l etat Marketplace.'));
+      throw new Error(toApiErrorMessage(error, 'Impossible de charger l etat marketplace.'));
     }
   },
 
   async purchaseProduct(payload: { productId: string; quantity: number }): Promise<PurchaseProductResponse> {
     try {
       const response = await systemApiClient.post<unknown>(
-        MARKETPLACE_ROUTES.purchases,
+        MARKETPLACE_ROUTES.orders,
         toPurchasePayload(payload),
       );
-      return toPurchaseResponse(response.data);
+      const purchase = toPurchaseResponse(response.data);
+      const refreshedState = await this.fetchMarketplaceState();
+
+      return {
+        purchaseId: purchase.purchaseId,
+        createdDevices: purchase.createdDevices,
+        createdIdentifiers: purchase.createdIdentifiers,
+        redirectModule: purchase.redirectModule,
+        marketplaceState: refreshedState,
+      };
     } catch (error) {
       throw new Error(toApiErrorMessage(error, 'Achat impossible.'));
     }
@@ -57,11 +114,17 @@ export const marketplaceService = {
 
   async activateDevice(deviceId: string, input: DeviceConfigurationInput): Promise<ActivateDeviceResponse> {
     try {
-      const response = await systemApiClient.post<unknown>(
+      const response = await systemApiClient.patch<unknown>(
         MARKETPLACE_ROUTES.activateDevice(deviceId),
         toActivateDevicePayload(input),
       );
-      return toActivateDeviceResponse(response.data);
+      const activation = toActivateDeviceResponse(response.data);
+      const refreshedState = await this.fetchMarketplaceState();
+
+      return {
+        device: activation.device,
+        marketplaceState: refreshedState,
+      };
     } catch (error) {
       throw new Error(toApiErrorMessage(error, 'Activation impossible.'));
     }

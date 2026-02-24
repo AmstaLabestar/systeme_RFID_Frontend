@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Boxes,
   DoorOpen,
   Fingerprint,
   History,
@@ -23,6 +24,7 @@ interface SidebarProps {
 const iconMap: Record<DashboardPage, typeof LayoutDashboard> = {
   overview: LayoutDashboard,
   marketplace: ShoppingCart,
+  'admin-stock': Boxes,
   'rfid-presence': UserCircle2,
   'rfid-porte': DoorOpen,
   biometrie: Fingerprint,
@@ -34,8 +36,23 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   const { user } = useAuth();
   const { isModuleEnabled } = useMarketplace();
   const { mode, isDark, toggleMode } = useThemeMode();
+  const normalizedRole = user?.roleName?.trim().toLowerCase();
 
-  const visibleItems = BASE_NAV_ITEMS.filter((item) => !item.module || isModuleEnabled(item.module));
+  const visibleItems = BASE_NAV_ITEMS.filter((item) => {
+    if (item.module && !isModuleEnabled(item.module)) {
+      return false;
+    }
+
+    if (item.roles && item.roles.length > 0) {
+      if (!normalizedRole) {
+        return false;
+      }
+
+      return item.roles.map((role) => role.toLowerCase()).includes(normalizedRole);
+    }
+
+    return true;
+  });
   const userFullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim() || 'Utilisateur';
   const userInitials =
     [user?.firstName?.charAt(0), user?.lastName?.charAt(0)]

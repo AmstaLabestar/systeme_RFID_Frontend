@@ -13,12 +13,56 @@ enum AuthProvider {
   MAGIC_LINK
 }
 
+enum HardwareSystemCode {
+  RFID_PRESENCE
+  RFID_PORTE
+  BIOMETRIE
+  FEEDBACK
+}
+
+enum DeviceStatus {
+  IN_STOCK
+  RESERVED
+  ASSIGNED
+}
+
+enum IdentifierType {
+  BADGE
+  EMPREINTE
+  SERRURE
+}
+
+enum IdentifierStatus {
+  IN_STOCK
+  RESERVED
+  ASSIGNED
+}
+
+enum OrderTargetType {
+  DEVICE
+  IDENTIFIER_EXTENSION
+}
+
+enum OrderStatus {
+  CREATED
+  COMPLETED
+  FAILED
+}
+
+enum AllocationStatus {
+  RESERVED
+  ASSIGNED
+  RELEASED
+  FAILED
+}
+
 model Tenant {
   id        String   @id @default(uuid())
   name      String
   domain    String   @unique
   users     User[]
   roles     Role[]
+  orders    Order[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -42,28 +86,35 @@ model Role {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  name          String
-  email         String         @unique
-  phoneNumber   String?        @unique
-  passwordHash  String?
-  googleId      String?        @unique
-  provider      AuthProvider   @default(LOCAL)
-  isTwoFactorEnabled Boolean   @default(false)
+  id                       String         @id @default(uuid())
+  name                     String
+  email                    String         @unique
+  phoneNumber              String?        @unique
+  passwordHash             String?
+  googleId                 String?        @unique
+  provider                 AuthProvider   @default(LOCAL)
+  isTwoFactorEnabled       Boolean        @default(false)
   twoFactorSecretEncrypted String?
-  twoFactorSecretIv String?
-  twoFactorSecretTag String?
-  twoFactorSecretHash String?
-  roleId        String
-  tenantId      String
-  role          Role           @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  refreshTokens RefreshToken[]
-  magicLinkTokens MagicLinkToken[]
-  marketplaceState MarketplaceState?
-  servicesState ServicesState?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  twoFactorSecretIv        String?
+  twoFactorSecretTag       String?
+  twoFactorSecretHash      String?
+  roleId                   String
+  tenantId                 String
+  role                     Role              @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  tenant                   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  refreshTokens            RefreshToken[]
+  magicLinkTokens          MagicLinkToken[]
+  marketplaceState         MarketplaceState?
+  servicesState            ServicesState?
+  ownedDevices             Device[]          @relation("user_devices")
+  createdDevices           Device[]          @relation("admin_created_devices")
+  ownedIdentifiers         Identifier[]      @relation("user_identifiers")
+  createdIdentifiers       Identifier[]      @relation("admin_created_identifiers")
+  orders                   Order[]           @relation("user_orders")
+  allocations              Allocation[]      @relation("user_allocations")
+  adminActionLogs          AdminActionLog[]  @relation("admin_action_logs")
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
 
   @@index([email])
   @@index([phoneNumber])
@@ -132,4 +183,143 @@ model ServicesState {
   updatedAt       DateTime @updatedAt
 
   @@map("services_states")
+}
+
+model BusinessSystem {
+  id                   String            @id @default(uuid())
+  name                 String
+  code                 HardwareSystemCode @unique
+  hasIdentifiers       Boolean           @default(false)
+  identifiersPerDevice Int               @default(0)
+  identifierType       IdentifierType?
+  isActive             Boolean           @default(true)
+  devices              Device[]
+  identifiers          Identifier[]
+  orders               Order[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([isActive])
+  @@map("business_systems")
+}
+
+model Device {
+  id               String       @id @default(uuid())
+  systemId         String
+  system           BusinessSystem @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  macAddress       String       @unique
+  status           DeviceStatus @default(IN_STOCK)
+  ownerId          String?
+  owner            User?        @relation("user_devices", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerTenantId    String?
+  createdById      String?
+  createdBy        User?        @relation("admin_created_devices", fields: [createdById], references: [id], onDelete: SetNull)
+  identifiers      Identifier[]
+  allocations      Allocation[]
+  configuredName   String?
+  configuredLocation String?
+  isConfigured     Boolean      @default(false)
+  qrCodeToken      String?      @unique
+  qrCodeDataUrl    String?
+  assignedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([systemId])
+  @@index([status])
+  @@index([ownerId])
+  @@index([ownerTenantId])
+  @@index([systemId, status])
+  @@map("devices")
+}
+
+model Identifier {
+  id                 String           @id @default(uuid())
+  systemId           String
+  system             BusinessSystem   @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  deviceId           String?
+  device             Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ownerId            String?
+  owner              User?            @relation("user_identifiers", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerTenantId      String?
+  createdById        String?
+  createdBy          User?            @relation("admin_created_identifiers", fields: [createdById], references: [id], onDelete: SetNull)
+  type               IdentifierType
+  physicalIdentifier String           @unique
+  status             IdentifierStatus @default(IN_STOCK)
+  allocations        Allocation[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@index([systemId])
+  @@index([status])
+  @@index([ownerId])
+  @@index([ownerTenantId])
+  @@index([deviceId])
+  @@index([systemId, status])
+  @@index([physicalIdentifier])
+  @@map("identifiers")
+}
+
+model Order {
+  id             String          @id @default(uuid())
+  customerId     String
+  customer       User            @relation("user_orders", fields: [customerId], references: [id], onDelete: Restrict)
+  tenantId       String
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  systemId       String
+  system         BusinessSystem  @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  targetType     OrderTargetType
+  quantity       Int
+  unitPriceCents Int?
+  currency       String?
+  status         OrderStatus     @default(CREATED)
+  failureReason  String?
+  allocations    Allocation[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([customerId])
+  @@index([tenantId])
+  @@index([systemId])
+  @@index([status])
+  @@map("orders")
+}
+
+model Allocation {
+  id           String           @id @default(uuid())
+  orderId      String
+  order        Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerId   String
+  customer     User             @relation("user_allocations", fields: [customerId], references: [id], onDelete: Restrict)
+  deviceId     String?
+  device       Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  identifierId String?
+  identifier   Identifier?      @relation(fields: [identifierId], references: [id], onDelete: SetNull)
+  status       AllocationStatus @default(ASSIGNED)
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([deviceId])
+  @@index([identifierId])
+  @@index([status])
+  @@map("allocations")
+}
+
+model AdminActionLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actor      User     @relation("admin_action_logs", fields: [actorId], references: [id], onDelete: Restrict)
+  action     String
+  targetType String
+  targetId   String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@map("admin_action_logs")
 }

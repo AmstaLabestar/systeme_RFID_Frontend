@@ -5,6 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { DeviceStatus, HardwareSystemCode } from '@prisma/client';
+import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import {
   QR_FEEDBACK_COMMENT_MAX_LENGTH,
   QR_FEEDBACK_COOLDOWN_MS,
@@ -19,7 +21,10 @@ import { SubmitPublicFeedbackDto } from './dto/submit-public-feedback.dto';
 
 @Injectable()
 export class PublicFeedbackService {
-  constructor(private readonly systemsStateService: SystemsStateService) {}
+  constructor(
+    private readonly systemsStateService: SystemsStateService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async submitByQrToken(qrToken: string, dto: SubmitPublicFeedbackDto) {
     const normalizedQrToken = qrToken.trim();
@@ -42,20 +47,49 @@ export class PublicFeedbackService {
       comment = sanitizedComment.length > 0 ? sanitizedComment : undefined;
     }
 
-    const resolvedDevice = await this.systemsStateService.findFeedbackDeviceByQrToken(
-      normalizedQrToken,
-    );
+    const dbFeedbackDevice = await this.prisma.device.findFirst({
+      where: {
+        qrCodeToken: normalizedQrToken,
+        status: DeviceStatus.ASSIGNED,
+        ownerId: {
+          not: null,
+        },
+        system: {
+          code: HardwareSystemCode.FEEDBACK,
+        },
+      },
+      select: {
+        id: true,
+        ownerId: true,
+        isConfigured: true,
+      },
+    });
 
-    if (!resolvedDevice) {
+    const fallbackDevice = dbFeedbackDevice
+      ? null
+      : await this.systemsStateService.findFeedbackDeviceByQrToken(normalizedQrToken);
+
+    if (!dbFeedbackDevice && !fallbackDevice) {
       throw new NotFoundException('Lien QR invalide ou introuvable.');
     }
 
-    if (!resolvedDevice.device.configured) {
+    if (dbFeedbackDevice && !dbFeedbackDevice.isConfigured) {
       throw new BadRequestException('Ce boitier feedback n est pas actif.');
     }
 
-    const servicesState = await this.systemsStateService.getServicesState(resolvedDevice.userId);
-    const latestQrTimestamp = getLatestQrFeedbackTimestamp(servicesState, resolvedDevice.device.id);
+    if (fallbackDevice && !fallbackDevice.device.configured) {
+      throw new BadRequestException('Ce boitier feedback n est pas actif.');
+    }
+
+    const targetUserId = dbFeedbackDevice?.ownerId ?? fallbackDevice?.userId;
+    const targetDeviceId = dbFeedbackDevice?.id ?? fallbackDevice?.device.id;
+
+    if (!targetUserId || !targetDeviceId) {
+      throw new NotFoundException('Lien QR invalide ou introuvable.');
+    }
+
+    const servicesState = await this.systemsStateService.getServicesState(targetUserId);
+    const latestQrTimestamp = getLatestQrFeedbackTimestamp(servicesState, targetDeviceId);
     const now = Date.now();
 
     if (latestQrTimestamp > 0 && now - latestQrTimestamp < QR_FEEDBACK_COOLDOWN_MS) {
@@ -68,7 +102,7 @@ export class PublicFeedbackService {
 
     const feedbackRecord = {
       id: createId('fb'),
-      deviceId: resolvedDevice.device.id,
+      deviceId: targetDeviceId,
       module: 'feedback' as const,
       sentiment,
       source: 'QR' as const,
@@ -77,7 +111,7 @@ export class PublicFeedbackService {
     };
 
     servicesState.feedbackRecords = [feedbackRecord, ...servicesState.feedbackRecords];
-    await this.systemsStateService.saveServicesState(resolvedDevice.userId, servicesState);
+    await this.systemsStateService.saveServicesState(targetUserId, servicesState);
 
     return {
       success: true,

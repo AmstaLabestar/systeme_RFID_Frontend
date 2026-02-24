@@ -136,11 +136,16 @@ function toModuleKey(value: unknown): ModuleKey | null {
 
   const aliases: Record<string, ModuleKey> = {
     'rfid-presence': 'rfid-presence',
+    rfidpresence: 'rfid-presence',
     rfid_presence: 'rfid-presence',
+    'rfid presence': 'rfid-presence',
     'rfid-porte': 'rfid-porte',
+    rfidporte: 'rfid-porte',
     rfid_porte: 'rfid-porte',
+    'rfid porte': 'rfid-porte',
     biometrie: 'biometrie',
     biometric: 'biometrie',
+    biometry: 'biometrie',
     feedback: 'feedback',
   };
 
@@ -153,9 +158,12 @@ function toIdentifierType(value: unknown): IdentifierType | null {
   const aliases: Record<string, IdentifierType> = {
     'badge-rfid': 'badge-rfid',
     badge_rfid: 'badge-rfid',
+    badge: 'badge-rfid',
     empreinte: 'empreinte',
+    fingerprint: 'empreinte',
     'serrure-rfid': 'serrure-rfid',
     serrure_rfid: 'serrure-rfid',
+    serrure: 'serrure-rfid',
   };
 
   return aliases[normalized] ?? null;
@@ -203,36 +211,90 @@ function getServicesSource(value: unknown): UnknownRecord {
 
 function toDeviceUnit(value: unknown): DeviceUnit | null {
   const source = asRecord(value);
-  const module = toModuleKey(pickFirstDefined(source.module, source.module_key, source.moduleKey));
+  const systemSource = asRecord(source.system);
+  const module =
+    toModuleKey(
+      pickFirstDefined(
+        source.module,
+        source.module_key,
+        source.moduleKey,
+        source.systemCode,
+        source.system_code,
+        systemSource.code,
+        systemSource.name,
+      ),
+    ) || null;
   const typeSafeId = asOptionalString(source.id);
 
   if (!module || !typeSafeId) {
     return null;
   }
 
+  const rawMacAddress = asString(
+    pickFirstDefined(source.provisionedMacAddress, source.provisioned_mac_address, source.macAddress),
+    '',
+  );
+  const configuredName = asOptionalString(pickFirstDefined(source.name, source.configuredName));
+  const configuredLocation = asOptionalString(pickFirstDefined(source.location, source.configuredLocation));
+  const isConfigured = asBoolean(
+    pickFirstDefined(source.configured, source.isConfigured, source.is_configured),
+    false,
+  );
+  const identifierCollection = asArray(pickFirstDefined(source.identifiers, source.inventory));
+  const explicitCapacity = pickFirstDefined(source.capacity, systemSource.identifiersPerDevice);
+  const resolvedCapacity =
+    explicitCapacity !== undefined
+      ? asNumber(explicitCapacity, 0)
+      : identifierCollection.length;
+  const resolvedName =
+    configuredName ||
+    (asOptionalString(systemSource.name) ? `${asOptionalString(systemSource.name)} (${typeSafeId.slice(0, 6)})` : undefined) ||
+    `Boitier ${typeSafeId}`;
+
   return {
     id: typeSafeId,
     module,
-    name: asString(source.name, `Boitier ${typeSafeId}`),
-    location: asString(source.location, 'A configurer'),
-    provisionedMacAddress: asString(
-      pickFirstDefined(source.provisionedMacAddress, source.provisioned_mac_address),
-      '',
-    ),
-    qrToken: asOptionalString(pickFirstDefined(source.qrToken, source.qr_token)),
+    name: resolvedName,
+    location: configuredLocation || 'A configurer',
+    provisionedMacAddress: rawMacAddress,
+    qrToken: asOptionalString(pickFirstDefined(source.qrToken, source.qr_token, source.qrCodeToken)),
     systemIdentifier: asOptionalString(
-      pickFirstDefined(source.systemIdentifier, source.system_identifier),
+      pickFirstDefined(
+        source.systemIdentifier,
+        source.system_identifier,
+        isConfigured ? rawMacAddress : undefined,
+      ),
     ),
-    configured: asBoolean(source.configured, false),
-    capacity: asNumber(source.capacity, 0),
-    createdAt: asString(pickFirstDefined(source.createdAt, source.created_at), new Date().toISOString()),
-    activatedAt: asOptionalString(pickFirstDefined(source.activatedAt, source.activated_at)),
+    configured: isConfigured,
+    capacity: resolvedCapacity,
+    createdAt: asString(
+      pickFirstDefined(source.createdAt, source.created_at, source.assignedAt, source.assigned_at),
+      new Date().toISOString(),
+    ),
+    activatedAt: asOptionalString(
+      pickFirstDefined(source.activatedAt, source.activated_at, source.updatedAt, source.updated_at),
+    ),
   };
 }
 
 function toInventoryIdentifier(value: unknown): InventoryIdentifier | null {
   const source = asRecord(value);
-  const module = toModuleKey(pickFirstDefined(source.module, source.module_key, source.moduleKey));
+  const systemSource = asRecord(source.system);
+  const deviceSource = asRecord(source.device);
+  const deviceSystem = asRecord(deviceSource.system);
+  const module = toModuleKey(
+    pickFirstDefined(
+      source.module,
+      source.module_key,
+      source.moduleKey,
+      source.systemCode,
+      source.system_code,
+      systemSource.code,
+      systemSource.name,
+      deviceSystem.code,
+      deviceSystem.name,
+    ),
+  );
   const type = toIdentifierType(pickFirstDefined(source.type, source.identifier_type));
   const id = asOptionalString(source.id);
 
@@ -240,15 +302,22 @@ function toInventoryIdentifier(value: unknown): InventoryIdentifier | null {
     return null;
   }
 
+  const normalizedStatus = asString(source.status).trim().toUpperCase();
+  const ownerId = asOptionalString(pickFirstDefined(source.ownerId, source.owner_id));
+  const employeeId = asOptionalString(pickFirstDefined(source.employeeId, source.employee_id));
+
   return {
     id,
     module,
     type,
-    code: asString(source.code, id.toUpperCase()),
-    status: asString(source.status).toLowerCase() === 'assigned' ? 'assigned' : 'available',
+    code: asString(pickFirstDefined(source.code, source.physicalIdentifier), id.toUpperCase()),
+    status: employeeId || (normalizedStatus === 'ASSIGNED' && !ownerId) ? 'assigned' : 'available',
     deviceId: asOptionalString(pickFirstDefined(source.deviceId, source.device_id)),
-    employeeId: asOptionalString(pickFirstDefined(source.employeeId, source.employee_id)),
-    acquiredAt: asString(pickFirstDefined(source.acquiredAt, source.acquired_at), new Date().toISOString()),
+    employeeId,
+    acquiredAt: asString(
+      pickFirstDefined(source.acquiredAt, source.acquired_at, source.createdAt, source.created_at),
+      new Date().toISOString(),
+    ),
   };
 }
 
@@ -354,12 +423,14 @@ function mapCollection<T>(values: unknown, mapper: (value: unknown) => T | null)
 
 export function toAuthUser(value: unknown): AuthUser {
   const source = asRecord(value);
+  const roleSource = asRecord(source.role);
   return {
     id: asString(pickFirstDefined(source.id, source.user_id), ''),
     firstName: asString(pickFirstDefined(source.firstName, source.first_name), ''),
     lastName: asString(pickFirstDefined(source.lastName, source.last_name), ''),
     email: asString(source.email, ''),
     company: asString(source.company, ''),
+    roleName: asOptionalString(pickFirstDefined(source.roleName, source.role_name, roleSource.name)),
   };
 }
 
@@ -432,73 +503,165 @@ export function toProductList(value: unknown): Product[] {
   const list = Array.isArray(value)
     ? value
     : asArray(pickFirstDefined(source.items, source.products, source.catalog, source.data));
+  const products: Product[] = [];
+  const defaultDevicePriceByModule: Record<ModuleKey, number> = {
+    'rfid-presence': 21000,
+    'rfid-porte': 20000,
+    biometrie: 20000,
+    feedback: 15000,
+  };
+  const defaultExtensionPriceByModule: Record<Exclude<ModuleKey, 'feedback'>, number> = {
+    'rfid-presence': 1000,
+    'rfid-porte': 1000,
+    biometrie: 1000,
+  };
 
-  return list
-    .map((entry) => {
-      const item = asRecord(entry);
-      const id = asOptionalString(item.id);
-      const module = toModuleKey(pickFirstDefined(item.module, item.module_key, item.moduleKey));
+  list.forEach((entry) => {
+    const item = asRecord(entry);
+    const systemCodeOrModule = pickFirstDefined(
+      item.code,
+      item.systemCode,
+      item.system_code,
+      item.module,
+      item.moduleKey,
+      item.module_key,
+    );
+    const module = toModuleKey(systemCodeOrModule);
+    const hasStockSummaryFields =
+      systemCodeOrModule !== undefined &&
+      (item.availableDevices !== undefined || item.availableExtensions !== undefined);
 
-      if (!id || !module) {
-        return null;
-      }
-
-      const kindValue = asString(pickFirstDefined(item.kind, item.type)).toLowerCase();
-      const kind: Product['kind'] = kindValue === 'identifier-pack' ? 'identifier-pack' : 'device';
+    if (hasStockSummaryFields && module) {
+      const systemName = asString(item.name, module);
       const identifierType = toIdentifierType(
         pickFirstDefined(item.identifierType, item.identifier_type),
       );
+      const hasIdentifiers = asBoolean(item.hasIdentifiers, module !== 'feedback');
+      const identifiersPerDevice = asNumber(
+        pickFirstDefined(item.identifiersPerDevice, item.identifiers_per_device),
+        hasIdentifiers ? 5 : 0,
+      );
+      const availableDevices = asNumber(
+        pickFirstDefined(item.availableDevices, item.available_devices),
+        0,
+      );
+      const availableExtensions = asNumber(
+        pickFirstDefined(item.availableExtensions, item.available_extensions),
+        0,
+      );
 
-      return {
-        id,
-        apiSku: asOptionalString(pickFirstDefined(item.apiSku, item.api_sku)),
-        kind,
+      products.push({
+        id: `device-${module}`,
+        apiSku: asString(item.code, ''),
+        kind: 'device',
         module,
         identifierType: identifierType || undefined,
-        label: asString(pickFirstDefined(item.label, item.name), id),
-        description: asString(item.description, ''),
-        unitPrice: asNumber(pickFirstDefined(item.unitPrice, item.unit_price, item.price), 0),
-        stockLimit:
-          pickFirstDefined(item.stockLimit, item.stock_limit) !== undefined
-            ? asNumber(pickFirstDefined(item.stockLimit, item.stock_limit), 0)
-            : undefined,
-        includedIdentifiers:
-          pickFirstDefined(item.includedIdentifiers, item.included_identifiers) !== undefined
-            ? asNumber(pickFirstDefined(item.includedIdentifiers, item.included_identifiers), 0)
-            : undefined,
-        quantityPerPack:
-          pickFirstDefined(item.quantityPerPack, item.quantity_per_pack) !== undefined
-            ? asNumber(pickFirstDefined(item.quantityPerPack, item.quantity_per_pack), 0)
-            : undefined,
-      } satisfies Product;
-    })
-    .filter((entry): entry is Product => entry !== null);
+        label: `Boitier ${systemName}`,
+        description: `Boitier physique ${systemName} provisionne en stock reel.`,
+        unitPrice: defaultDevicePriceByModule[module],
+        stockLimit: Math.max(availableDevices, 0),
+        includedIdentifiers: Math.max(identifiersPerDevice, 0),
+      });
+
+      if (module !== 'feedback' && hasIdentifiers) {
+        products.push({
+          id: `identifier-extension-${module}`,
+          apiSku: `${asString(item.code, '')}-EXT`,
+          kind: 'identifier-pack',
+          module,
+          identifierType: identifierType || undefined,
+          label: `Extensions ${systemName}`,
+          description: `Extensions physiques ${systemName} deja en stock reel.`,
+          unitPrice: defaultExtensionPriceByModule[module],
+          stockLimit: Math.max(availableExtensions, 0),
+          quantityPerPack: 1,
+        });
+      }
+
+      return;
+    }
+
+    const id = asOptionalString(item.id);
+    const fallbackModule = toModuleKey(pickFirstDefined(item.module, item.module_key, item.moduleKey));
+    if (!id || !fallbackModule) {
+      return;
+    }
+
+    const kindValue = asString(pickFirstDefined(item.kind, item.type)).toLowerCase();
+    const kind: Product['kind'] = kindValue === 'identifier-pack' ? 'identifier-pack' : 'device';
+    const identifierType = toIdentifierType(
+      pickFirstDefined(item.identifierType, item.identifier_type),
+    );
+
+    products.push({
+      id,
+      apiSku: asOptionalString(pickFirstDefined(item.apiSku, item.api_sku)),
+      kind,
+      module: fallbackModule,
+      identifierType: identifierType || undefined,
+      label: asString(pickFirstDefined(item.label, item.name), id),
+      description: asString(item.description, ''),
+      unitPrice: asNumber(pickFirstDefined(item.unitPrice, item.unit_price, item.price), 0),
+      stockLimit:
+        pickFirstDefined(item.stockLimit, item.stock_limit) !== undefined
+          ? asNumber(pickFirstDefined(item.stockLimit, item.stock_limit), 0)
+          : undefined,
+      includedIdentifiers:
+        pickFirstDefined(item.includedIdentifiers, item.included_identifiers) !== undefined
+          ? asNumber(pickFirstDefined(item.includedIdentifiers, item.included_identifiers), 0)
+          : undefined,
+      quantityPerPack:
+        pickFirstDefined(item.quantityPerPack, item.quantity_per_pack) !== undefined
+          ? asNumber(pickFirstDefined(item.quantityPerPack, item.quantity_per_pack), 0)
+          : undefined,
+    });
+  });
+
+  return products;
 }
 
 export function toMarketplaceState(value: unknown): MarketplaceStatePayload {
   const source = getMarketplaceSource(value);
-  const stockSource = asRecord(
-    pickFirstDefined(source.productStockById, source.product_stock_by_id),
+  const stockSource = asRecord(pickFirstDefined(source.productStockById, source.product_stock_by_id));
+  const productStockById = Object.entries(stockSource).reduce<Record<string, number | null>>((accumulator, [productId, stockValue]) => {
+    accumulator[productId] = asNullableNumber(stockValue);
+    return accumulator;
+  }, {});
+
+  const devices = mapCollection(
+    pickFirstDefined(source.devices, source.device_units),
+    toDeviceUnit,
   );
 
-  const productStockById = Object.entries(stockSource).reduce<Record<string, number | null>>(
-    (accumulator, [productId, stockValue]) => {
-      accumulator[productId] = asNullableNumber(stockValue);
-      return accumulator;
-    },
-    {},
+  const inventoryFromRoot = mapCollection(
+    pickFirstDefined(source.inventory, source.identifiers),
+    toInventoryIdentifier,
   );
+  const standaloneInventory = mapCollection(
+    pickFirstDefined(source.standaloneIdentifiers, source.standalone_identifiers),
+    toInventoryIdentifier,
+  );
+  const inventoryFromDevices = devices.flatMap((device) => {
+    const rawDevice = asArray(pickFirstDefined(source.devices, source.device_units)).find((entry) => {
+      const record = asRecord(entry);
+      return asOptionalString(record.id) === device.id;
+    });
+    const deviceRecord = asRecord(rawDevice);
+    return mapCollection(
+      pickFirstDefined(deviceRecord.identifiers, deviceRecord.inventory),
+      toInventoryIdentifier,
+    );
+  });
+
+  const inventoryMap = new Map<string, InventoryIdentifier>();
+  [...inventoryFromRoot, ...inventoryFromDevices, ...standaloneInventory].forEach((identifier) => {
+    inventoryMap.set(identifier.id, identifier);
+  });
 
   return {
     productStockById,
-    devices: mapCollection(
-      pickFirstDefined(source.devices, source.device_units),
-      toDeviceUnit,
-    ),
-    inventory: mapCollection(
-      pickFirstDefined(source.inventory, source.identifiers),
-      toInventoryIdentifier,
-    ),
+    devices,
+    inventory: Array.from(inventoryMap.values()),
   };
 }
 
@@ -524,29 +687,46 @@ export function toServicesState(value: unknown): ServicesStatePayload {
 
 export function toPurchaseResponse(value: unknown): NormalizedPurchaseResponse {
   const source = getPayloadSource(value);
+  const order = asRecord(source.order);
+  const orderSystem = asRecord(order.system);
   const redirectModule =
-    toModuleKey(pickFirstDefined(source.redirectModule, source.redirect_module)) || 'rfid-presence';
+    toModuleKey(
+      pickFirstDefined(
+        source.redirectModule,
+        source.redirect_module,
+        orderSystem.code,
+        orderSystem.name,
+      ),
+    ) || 'rfid-presence';
 
   return {
-    purchaseId: asString(pickFirstDefined(source.purchaseId, source.purchase_id), ''),
+    purchaseId: asString(pickFirstDefined(source.purchaseId, source.purchase_id, order.id), ''),
     createdDevices: mapCollection(
-      pickFirstDefined(source.createdDevices, source.created_devices),
+      pickFirstDefined(source.createdDevices, source.created_devices, source.allocatedDevices, source.allocated_devices),
       toDeviceUnit,
     ),
     createdIdentifiers: mapCollection(
-      pickFirstDefined(source.createdIdentifiers, source.created_identifiers),
+      pickFirstDefined(source.createdIdentifiers, source.created_identifiers, source.allocatedIdentifiers, source.allocated_identifiers),
       toInventoryIdentifier,
     ),
     redirectModule,
     marketplaceState: toMarketplaceState(
-      pickFirstDefined(source.marketplaceState, source.marketplace_state, source.marketplace),
+      pickFirstDefined(
+        source.marketplaceState,
+        source.marketplace_state,
+        source.marketplace,
+        {
+          devices: pickFirstDefined(source.createdDevices, source.allocatedDevices),
+          inventory: pickFirstDefined(source.createdIdentifiers, source.allocatedIdentifiers),
+        },
+      ),
     ),
   };
 }
 
 export function toActivateDeviceResponse(value: unknown): NormalizedActivateDeviceResponse {
   const source = getPayloadSource(value);
-  const device = toDeviceUnit(pickFirstDefined(source.device, source.device_unit));
+  const device = toDeviceUnit(pickFirstDefined(source.device, source.device_unit, source));
 
   if (!device) {
     throw new Error('Reponse activation boitier invalide.');
@@ -710,8 +890,44 @@ export function toGoogleVerifyPayload(idToken: string): UnknownRecord {
 }
 
 export function toPurchasePayload(payload: { productId: string; quantity: number }): UnknownRecord {
+  const normalizedProductId = payload.productId.trim().toLowerCase();
+  const moduleByLegacyProductId: Record<string, ModuleKey> = {
+    'device-rfid-presence': 'rfid-presence',
+    'device-rfid-porte': 'rfid-porte',
+    'device-biometrie': 'biometrie',
+    'device-feedback': 'feedback',
+    'pack-badge-rfid': 'rfid-presence',
+    'pack-serrure-rfid': 'rfid-porte',
+    'pack-empreinte': 'biometrie',
+  };
+
+  const extractedDeviceModule = normalizedProductId.startsWith('device-')
+    ? toModuleKey(normalizedProductId.replace('device-', ''))
+    : null;
+  const extractedExtensionModule = normalizedProductId.startsWith('identifier-extension-')
+    ? toModuleKey(normalizedProductId.replace('identifier-extension-', ''))
+    : null;
+  const fallbackModule = moduleByLegacyProductId[normalizedProductId] ?? null;
+  const module = extractedDeviceModule ?? extractedExtensionModule ?? fallbackModule;
+  const targetType =
+    extractedExtensionModule || normalizedProductId.startsWith('pack-')
+      ? 'IDENTIFIER_EXTENSION'
+      : 'DEVICE';
+
+  const systemCodeByModule: Record<ModuleKey, string> = {
+    'rfid-presence': 'RFID_PRESENCE',
+    'rfid-porte': 'RFID_PORTE',
+    biometrie: 'BIOMETRIE',
+    feedback: 'FEEDBACK',
+  };
+
+  if (!module) {
+    throw new Error('Produit marketplace invalide: impossible de determiner le systeme cible.');
+  }
+
   return {
-    productId: payload.productId,
+    systemCode: systemCodeByModule[module],
+    targetType,
     quantity: payload.quantity,
   };
 }
