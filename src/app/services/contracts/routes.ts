@@ -1,10 +1,13 @@
 export const AUTH_ROUTES = {
   session: '/auth/session',
   signIn: '/auth/signin',
+  signInVerify2fa: '/auth/signin/verify-2fa',
   signUp: '/auth/signup',
   googleVerify: '/auth/google/verify',
-  whatsappRequest: '/auth/whatsapp/request',
-  whatsappVerify: '/auth/whatsapp/verify',
+  magicLink: '/auth/magic-link',
+  magicLinkVerify: '/auth/magic-link/verify',
+  refresh: '/auth/refresh',
+  logout: '/auth/logout',
 } as const;
 
 export const MARKETPLACE_ROUTES = {
@@ -24,4 +27,8 @@ export const SERVICES_ROUTES = {
 export const SYSTEM_ROUTES = {
   marketplaceState: '/systems/marketplace-state',
   servicesState: '/systems/services-state',
+} as const;
+
+export const PUBLIC_ROUTES = {
+  feedbackByQrToken: (qrToken: string) => `/public/feedback/${encodeURIComponent(qrToken)}`,
 } as const;

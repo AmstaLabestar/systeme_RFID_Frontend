@@ -6,7 +6,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { IDENTIFIER_LABELS, MARKETPLACE_CATALOG } from '@/app/data';
+import { IDENTIFIER_LABELS } from '@/app/data';
 import { marketplaceService, queryKeys } from '@/app/services';
 import { useAuth } from '@/app/contexts/auth';
 import { useNotifications } from '@/app/contexts/notifications';
@@ -91,7 +91,7 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const catalogQuery = useQuery({
     queryKey: queryKeys.marketplace.catalog(),
     queryFn: marketplaceService.fetchCatalog,
-    initialData: MARKETPLACE_CATALOG,
+    enabled: Boolean(user),
   });
 
   const marketplaceStateQuery = useQuery({
@@ -100,7 +100,7 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
     enabled: Boolean(user),
   });
 
-  const fullCatalog = catalogQuery.data;
+  const fullCatalog = catalogQuery.data ?? [];
   const rawMarketplaceState = marketplaceStateQuery.data;
 
   const productStockById = useMemo(

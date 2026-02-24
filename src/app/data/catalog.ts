@@ -1,6 +1,4 @@
-import type { DashboardNavItem, IdentifierType, ModuleKey, Product } from '@/app/types';
-
-const MOCK_DEVICE_STOCK = 100;
+import type { DashboardNavItem, IdentifierType, ModuleKey } from '@/app/types';
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   'rfid-presence': 'RFID Presence',
@@ -21,94 +19,6 @@ export const IDENTIFIER_LABELS: Record<IdentifierType, string> = {
   empreinte: 'Empreinte',
   'serrure-rfid': 'Serrure RFID',
 };
-
-export const DEVICE_PRODUCTS: Product[] = [
-  {
-    id: 'device-rfid-presence',
-    apiSku: 'HW-RFP-001',
-    kind: 'device',
-    module: 'rfid-presence',
-    identifierType: 'badge-rfid',
-    label: 'Boitier RFID Presence',
-    description: 'Unite centrale de gestion de presence et badges RFID.',
-    unitPrice: 21000,
-    stockLimit: MOCK_DEVICE_STOCK,
-    includedIdentifiers: 5,
-  },
-  {
-    id: 'device-rfid-porte',
-    apiSku: 'HW-RFD-001',
-    kind: 'device',
-    module: 'rfid-porte',
-    identifierType: 'serrure-rfid',
-    label: 'Boitier RFID Porte',
-    description: 'Unite centrale de controle d acces des portes.',
-    unitPrice: 20000,
-    stockLimit: MOCK_DEVICE_STOCK,
-    includedIdentifiers: 5,
-  },
-  {
-    id: 'device-biometrie',
-    apiSku: 'HW-BIO-001',
-    kind: 'device',
-    module: 'biometrie',
-    identifierType: 'empreinte',
-    label: 'Boitier Empreinte Digitale',
-    description: 'Unite centrale de reconnaissance biometrique.',
-    unitPrice: 20000,
-    stockLimit: MOCK_DEVICE_STOCK,
-    includedIdentifiers: 5,
-  },
-  {
-    id: 'device-feedback',
-    apiSku: 'HW-FBK-001',
-    kind: 'device',
-    module: 'feedback',
-    label: 'Boitier Feedback',
-    description: 'Boitier a 3 boutons (negatif, neutre, positif) pour la satisfaction.',
-    unitPrice: 15000,
-    stockLimit: MOCK_DEVICE_STOCK,
-    includedIdentifiers: 0,
-  },
-];
-
-export const IDENTIFIER_PRODUCTS: Product[] = [
-  {
-    id: 'pack-badge-rfid',
-    apiSku: 'PK-BAD-010',
-    kind: 'identifier-pack',
-    module: 'rfid-presence',
-    identifierType: 'badge-rfid',
-    label: 'Pack Badges RFID',
-    description: '10 badges RFID supplementaires pour vos boitiers presence.',
-    unitPrice: 1000,
-    quantityPerPack: 10,
-  },
-  {
-    id: 'pack-empreinte',
-    apiSku: 'PK-BIO-010',
-    kind: 'identifier-pack',
-    module: 'biometrie',
-    identifierType: 'empreinte',
-    label: 'Pack Emprunts (Empreinte)',
-    description: '10 identifiants biometrie supplementaires.',
-    unitPrice: 1000,
-    quantityPerPack: 10,
-  },
-  {
-    id: 'pack-serrure-rfid',
-    apiSku: 'PK-SER-010',
-    kind: 'identifier-pack',
-    module: 'rfid-porte',
-    identifierType: 'serrure-rfid',
-    label: 'Pack Serrures RFID',
-    description: '10 identifiants de serrure supplementaires pour RFID Porte.',
-    unitPrice: 1000,
-    quantityPerPack: 10,
-  },
-];
-
-export const MARKETPLACE_CATALOG: Product[] = [...DEVICE_PRODUCTS, ...IDENTIFIER_PRODUCTS];
 
 export const BASE_NAV_ITEMS: DashboardNavItem[] = [
   { page: 'overview', label: 'Overview', path: '/dashboard/overview' },

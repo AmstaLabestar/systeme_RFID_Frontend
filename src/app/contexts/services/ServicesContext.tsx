@@ -7,12 +7,9 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
   type ReactNode,
 } from 'react';
-import { buildFeedbackSeed, seedEmployees, seedHistory } from '@/app/data';
 import { accessService, queryKeys, systemStoreService } from '@/app/services';
 import { useAuth } from '@/app/contexts/auth';
 import { useMarketplace } from '@/app/contexts/marketplace';
@@ -43,38 +40,32 @@ interface ServicesContextValue {
 
 const ServicesContext = createContext<ServicesContextValue | undefined>(undefined);
 
-const initialServicesState = {
-  employees: seedEmployees,
+const emptyServicesState = {
+  employees: [] as Employee[],
   assignments: [] as ServiceAssignment[],
-  history: seedHistory,
+  history: [] as HistoryEvent[],
   feedbackRecords: [] as FeedbackRecord[],
 };
 
 export function ServicesProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const feedbackSeededDeviceIds = useRef(new Set<string>());
   const { user } = useAuth();
   const userScope = user?.id ?? 'guest';
 
-  const { devices, applyMarketplaceState } = useMarketplace();
+  const { applyMarketplaceState } = useMarketplace();
   const { addNotification } = useNotifications();
 
   const servicesStateQuery = useQuery({
     queryKey: queryKeys.services.state(userScope),
     queryFn: systemStoreService.fetchServicesState,
-    initialData: initialServicesState,
     enabled: Boolean(user),
   });
 
-  const servicesState = servicesStateQuery.data;
+  const servicesState = servicesStateQuery.data ?? emptyServicesState;
   const employees = servicesState.employees;
   const assignments = servicesState.assignments;
   const history = servicesState.history;
   const feedbackRecords = servicesState.feedbackRecords;
-
-  const saveServicesStateMutation = useMutation({
-    mutationFn: systemStoreService.saveServicesState,
-  });
 
   const assignMutation = useMutation({
     mutationFn: accessService.assignIdentifier,
@@ -102,52 +93,6 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     },
     mutationKey: ['services', 'reassign', userScope],
   });
-
-  useEffect(() => {
-    feedbackSeededDeviceIds.current = new Set(feedbackRecords.map((record) => record.deviceId));
-  }, [feedbackRecords]);
-
-  useEffect(() => {
-    if (!servicesStateQuery.isFetchedAfterMount) {
-      return;
-    }
-
-    const configuredFeedbackDevices = devices.filter(
-      (device) => device.module === 'feedback' && device.configured,
-    );
-
-    const newRecords = configuredFeedbackDevices.flatMap((device) => {
-      const alreadyPersisted = feedbackRecords.some((record) => record.deviceId === device.id);
-
-      if (feedbackSeededDeviceIds.current.has(device.id) || alreadyPersisted) {
-        feedbackSeededDeviceIds.current.add(device.id);
-        return [];
-      }
-
-      feedbackSeededDeviceIds.current.add(device.id);
-      return buildFeedbackSeed(device.id, 90);
-    });
-
-    if (newRecords.length === 0) {
-      return;
-    }
-
-    const nextState = {
-      ...servicesState,
-      feedbackRecords: [...feedbackRecords, ...newRecords],
-    };
-
-    queryClient.setQueryData(queryKeys.services.state(userScope), nextState);
-    saveServicesStateMutation.mutate(nextState);
-  }, [
-    devices,
-    feedbackRecords,
-    servicesState,
-    servicesStateQuery.isFetchedAfterMount,
-    queryClient,
-    saveServicesStateMutation,
-    userScope,
-  ]);
 
   const assignIdentifier = useCallback(
     async (input: AssignIdentifierInput) => {

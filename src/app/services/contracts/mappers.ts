@@ -19,13 +19,9 @@ type UnknownRecord = Record<string, unknown>;
 
 export interface NormalizedAuthResponse {
   token: string;
+  refreshToken?: string;
+  redirectTo?: string;
   user: AuthUser;
-}
-
-export interface NormalizedWhatsAppOtpRequestResponse {
-  requestId: string;
-  expiresAt: string;
-  debugCode?: string;
 }
 
 export interface NormalizedPurchaseResponse {
@@ -223,6 +219,7 @@ function toDeviceUnit(value: unknown): DeviceUnit | null {
       pickFirstDefined(source.provisionedMacAddress, source.provisioned_mac_address),
       '',
     ),
+    qrToken: asOptionalString(pickFirstDefined(source.qrToken, source.qr_token)),
     systemIdentifier: asOptionalString(
       pickFirstDefined(source.systemIdentifier, source.system_identifier),
     ),
@@ -336,12 +333,17 @@ function toFeedbackRecord(value: unknown): FeedbackRecord | null {
     sentimentValue === 'negative' || sentimentValue === 'neutral' || sentimentValue === 'positive'
       ? sentimentValue
       : 'neutral';
+  const feedbackSourceValue = asString(source.source, 'BUTTON').trim().toUpperCase();
+  const feedbackSource: FeedbackRecord['source'] = feedbackSourceValue === 'QR' ? 'QR' : 'BUTTON';
+  const comment = asOptionalString(source.comment);
 
   return {
     id,
     deviceId,
     module: 'feedback',
     sentiment,
+    source: feedbackSource,
+    comment,
     createdAt: asString(pickFirstDefined(source.createdAt, source.created_at), new Date().toISOString()),
   };
 }
@@ -399,6 +401,19 @@ export function toAuthResponse(value: unknown): NormalizedAuthResponse {
     pickFirstDefined(source.user, source.profile, data.user, root.user, root.profile),
   );
   const user = toAuthUser(userSource);
+  const refreshToken = asOptionalString(
+    pickFirstDefined(
+      source.refreshToken,
+      source.refresh_token,
+      data.refreshToken,
+      data.refresh_token,
+      root.refreshToken,
+      root.refresh_token,
+    ),
+  );
+  const redirectTo = asOptionalString(
+    pickFirstDefined(source.redirectTo, source.redirect_to, data.redirectTo, root.redirectTo),
+  );
 
   if (!token || !user.id) {
     throw new Error('Reponse auth invalide.');
@@ -406,32 +421,9 @@ export function toAuthResponse(value: unknown): NormalizedAuthResponse {
 
   return {
     token,
+    refreshToken,
+    redirectTo,
     user,
-  };
-}
-
-export function toWhatsAppOtpRequestResponse(value: unknown): NormalizedWhatsAppOtpRequestResponse {
-  const root = asRecord(value);
-  const source = getPayloadSource(value);
-  const data = asRecord(root.data);
-  const requestId = asString(
-    pickFirstDefined(source.requestId, source.request_id, data.requestId, root.requestId),
-    '',
-  );
-
-  if (!requestId) {
-    throw new Error('Reponse OTP invalide.');
-  }
-
-  return {
-    requestId,
-    expiresAt: asString(
-      pickFirstDefined(source.expiresAt, source.expires_at, data.expiresAt, root.expiresAt),
-      '',
-    ),
-    debugCode: asOptionalString(
-      pickFirstDefined(source.debugCode, source.debug_code, data.debugCode, root.debugCode),
-    ),
   };
 }
 
@@ -603,6 +595,7 @@ function mapDeviceForApi(value: DeviceUnit): UnknownRecord {
     name: value.name,
     location: value.location,
     provisionedMacAddress: value.provisionedMacAddress,
+    qrToken: value.qrToken,
     systemIdentifier: value.systemIdentifier,
     configured: value.configured,
     capacity: value.capacity,
@@ -664,15 +657,27 @@ function mapFeedbackForApi(value: FeedbackRecord): UnknownRecord {
     deviceId: value.deviceId,
     module: value.module,
     sentiment: value.sentiment,
+    source: value.source,
+    comment: value.comment,
     createdAt: value.createdAt,
   };
 }
 
-export function toSignInPayload(payload: { email: string; password: string }): UnknownRecord {
-  return {
-    email: payload.email,
+export function toSignInPayload(payload: {
+  identifier: string;
+  password: string;
+  redirectTo?: string;
+}): UnknownRecord {
+  const body: UnknownRecord = {
+    identifier: payload.identifier,
     password: payload.password,
   };
+
+  if (payload.redirectTo) {
+    body.redirectTo = payload.redirectTo;
+  }
+
+  return body;
 }
 
 export function toSignUpPayload(payload: {
@@ -681,37 +686,26 @@ export function toSignUpPayload(payload: {
   company: string;
   email: string;
   password: string;
+  phoneNumber?: string;
 }): UnknownRecord {
-  return {
+  const body: UnknownRecord = {
     firstName: payload.firstName,
     lastName: payload.lastName,
     company: payload.company,
     email: payload.email,
     password: payload.password,
   };
+
+  if (payload.phoneNumber) {
+    body.phoneNumber = payload.phoneNumber;
+  }
+
+  return body;
 }
 
 export function toGoogleVerifyPayload(idToken: string): UnknownRecord {
   return {
     idToken,
-  };
-}
-
-export function toWhatsAppRequestPayload(phone: string): UnknownRecord {
-  return {
-    phone,
-  };
-}
-
-export function toWhatsAppVerifyPayload(payload: {
-  requestId: string;
-  code: string;
-  phone: string;
-}): UnknownRecord {
-  return {
-    requestId: payload.requestId,
-    code: payload.code,
-    phone: payload.phone,
   };
 }
 

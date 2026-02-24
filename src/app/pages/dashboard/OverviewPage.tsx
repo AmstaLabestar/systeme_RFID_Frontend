@@ -171,7 +171,7 @@ export function OverviewPage() {
               <Clock3 className="h-4 w-4 text-[var(--text-secondary)]" />
             </div>
             <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{formatDateTime(new Date().toISOString())}</p>
-            <p className="text-sm text-[var(--text-secondary)]">Etat synchronise cote frontend mock API</p>
+            <p className="text-sm text-[var(--text-secondary)]">Etat synchronise avec l API backend</p>
           </div>
         </article>
       </section>

@@ -11,8 +11,32 @@ interface RegisterFormValues {
   lastName: string;
   company: string;
   email: string;
+  phoneNumber?: string;
   password: string;
   confirmPassword: string;
+}
+
+function GoogleLogoIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
+      <path
+        d="M22.5 12.2c0-.8-.1-1.6-.2-2.3H12v4.4h5.9c-.3 1.4-1.1 2.5-2.3 3.3v2.8h3.7c2.2-2 3.2-4.9 3.2-8.2Z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 23c3 0 5.5-1 7.3-2.7l-3.7-2.8c-1 .7-2.3 1.2-3.6 1.2-2.8 0-5.1-1.9-5.9-4.4H2.3v2.9C4 20.7 7.7 23 12 23Z"
+        fill="#34A853"
+      />
+      <path
+        d="M6.1 14.3c-.2-.7-.3-1.5-.3-2.3 0-.8.1-1.6.3-2.3V6.8H2.3C1.5 8.3 1 10.1 1 12s.5 3.7 1.3 5.2l3.8-2.9Z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.3c1.5 0 2.9.5 4 1.6l3-3C17.5 2.1 15 1 12 1 7.7 1 4 3.3 2.3 6.8l3.8 2.9c.8-2.5 3.1-4.4 5.9-4.4Z"
+        fill="#EA4335"
+      />
+    </svg>
+  );
 }
 
 export function RegisterPage() {
@@ -46,6 +70,7 @@ export function RegisterPage() {
         company: values.company,
         email: values.email,
         password: values.password,
+        phoneNumber: values.phoneNumber,
       });
       toast.success('Compte cree, bienvenue.');
       navigate('/dashboard/overview', { replace: true });
@@ -64,14 +89,6 @@ export function RegisterPage() {
       toast.error(message);
       setIsGoogleRedirecting(false);
     }
-  };
-
-  const onWhatsAppSignIn = () => {
-    navigate('/auth/whatsapp', {
-      state: {
-        from: '/dashboard/overview',
-      },
-    });
   };
 
   return (
@@ -122,6 +139,22 @@ export function RegisterPage() {
           <span className={fieldErrorClassName}>{errors.email?.message ?? ''}</span>
         </label>
 
+        <label className={fieldWrapperClassName}>
+          <span className={fieldLabelClassName}>Numero de telephone (optionnel)</span>
+          <input
+            type="tel"
+            className={fieldInputClassName}
+            placeholder="+2250700000000"
+            {...register('phoneNumber', {
+              pattern: {
+                value: /^\+?[1-9]\d{7,14}$/,
+                message: 'Format international invalide',
+              },
+            })}
+          />
+          <span className={fieldErrorClassName}>{errors.phoneNumber?.message ?? ''}</span>
+        </label>
+
         <div className="grid gap-4 md:grid-cols-2">
           <label className={fieldWrapperClassName}>
             <span className={fieldLabelClassName}>Mot de passe</span>
@@ -167,25 +200,18 @@ export function RegisterPage() {
           <span className="h-px flex-1 bg-[var(--border-soft)]" />
         </div>
 
-        <div className={`grid gap-3 ${isGoogleOAuthAvailable ? 'sm:grid-cols-2' : ''}`}>
+        <div className="grid gap-3">
           {isGoogleOAuthAvailable ? (
             <button
               type="button"
-              className="btn btn-outline w-full"
+              className="btn btn-outline w-full gap-2"
               disabled={isSubmitting || isGoogleRedirecting}
               onClick={onGoogleSignIn}
             >
+              <GoogleLogoIcon />
               {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
             </button>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-outline w-full"
-            disabled={isSubmitting || isGoogleRedirecting}
-            onClick={onWhatsAppSignIn}
-          >
-            Continuer avec WhatsApp
-          </button>
         </div>
       </form>
     </AuthShell>

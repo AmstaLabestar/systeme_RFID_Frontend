@@ -1,7 +1,12 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '@/app/contexts';
 import { DashboardLayout } from '@/app/layout';
-import { GoogleCallbackPage, LoginPage, RegisterPage, WhatsAppOtpPage } from '@/app/pages/auth';
+import {
+  GoogleCallbackPage,
+  LoginPage,
+  MagicLinkCallbackPage,
+  RegisterPage,
+} from '@/app/pages/auth';
 import {
   BiometriePage,
   FeedbackPage,
@@ -11,6 +16,7 @@ import {
   RfidPortePage,
   RfidPresencePage,
 } from '@/app/pages/dashboard';
+import { PublicFeedbackPage } from '@/app/pages/public';
 import { PrivateRoute } from './PrivateRoute';
 
 function RootRedirect() {
@@ -40,7 +46,8 @@ export function AppRouter() {
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/register" element={<RegisterPage />} />
         <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
-        <Route path="/auth/whatsapp" element={<WhatsAppOtpPage />} />
+        <Route path="/auth/magic-link/callback" element={<MagicLinkCallbackPage />} />
+        <Route path="/feedback/:qrToken" element={<PublicFeedbackPage />} />
 
         <Route element={<PrivateRoute />}>
           <Route path="/dashboard" element={<DashboardLayout />}>

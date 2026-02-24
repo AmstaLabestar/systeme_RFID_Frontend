@@ -1,62 +1,73 @@
+# RFID SaaS - Frontend + Backend
 
-  # SaaS B2B Access Management Interface
+This repository contains:
 
-  This is a code bundle for SaaS B2B Access Management Interface. The original project is available at https://www.figma.com/design/YRST9xVizVnwqwCmTdQshQ/SaaS-B2B-Access-Management-Interface.
+- Frontend: React + TypeScript + Vite
+- Backend: NestJS + Prisma + PostgreSQL
 
-  ## Running the code
+The frontend now consumes real backend endpoints only (no JSON Server).
 
-  Run `npm i` to install the dependencies.
+## 1. Install dependencies
 
-  Create `.env.local` from `.env.example` and set your Google OAuth Client ID.
+```bash
+npm install
+npm --prefix backend install
+```
 
-  Run `npm run dev:api` to start the mock API (auth + systems, port `4011` by default).
+## 2. Configure environment
 
-  Run `npm run dev` to start the frontend.
+### Frontend
 
-  Frontend data fetching/caching is handled with React Query.
+Create `.env.local` from `.env.example`:
 
-  All `marketplace` / `services` endpoints are user-scoped from the bearer token, so each user keeps an isolated dashboard state.
+```env
+VITE_AUTH_API_URL=http://localhost:4012
+VITE_SYSTEM_API_URL=http://localhost:4012
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+VITE_GOOGLE_REDIRECT_URI=http://localhost:5173/auth/google/callback
+```
 
-  To switch from mock backend to real backend, only update `.env.local`:
-  - `VITE_AUTH_API_URL=https://your-auth-api`
-  - `VITE_SYSTEM_API_URL=https://your-business-api`
-  The frontend services already call REST endpoints with Axios/fetch and bearer token forwarding.
+### Backend
 
-  API contract layer is centralized in:
-  - `src/app/services/contracts/routes.ts` (all endpoint paths)
-  - `src/app/services/contracts/mappers.ts` (DTO -> UI model and UI payload -> API payload)
-  When your backend contract changes, update this layer without touching pages/contexts.
+Create `backend/.env` from `backend/.env.example` and fill at least:
 
-  ### OAuth / OTP routes
+- `DATABASE_URL`
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_CALLBACK_URL`
+- `MAGIC_LINK_CALLBACK_URL`
 
-  - Google callback: `/auth/google/callback`
-  - WhatsApp OTP auth: `/auth/whatsapp`
+## 3. Prepare backend database
 
-  ### Mock auth endpoints
+```bash
+npm --prefix backend run prisma:generate
+npm --prefix backend run prisma:migrate
+npm --prefix backend run prisma:seed
+```
 
-  - `POST /auth/signup`
-  - `POST /auth/signin`
-  - `GET /auth/session`
-  - `POST /auth/google/verify`
-  - `POST /auth/whatsapp/request`
-  - `POST /auth/whatsapp/verify`
+## 4. Run services
 
-  ### Mock systems endpoints
+```bash
+npm run dev:backend
+npm run dev
+```
 
-  - `GET /systems/state`
-  - `GET /systems/marketplace-state`
-  - `PUT /systems/marketplace-state`
-  - `GET /systems/services-state`
-  - `PUT /systems/services-state`
+- Backend default port: `4012`
+- Frontend default port: `5173`
 
-  ### Mock business endpoints
+## API contracts
 
-  - `GET /marketplace/catalog`
-  - `GET /marketplace/state`
-  - `POST /marketplace/purchases`
-  - `POST /marketplace/devices/:deviceId/activate`
-  - `GET /services/state`
-  - `POST /services/assignments`
-  - `DELETE /services/assignments/:assignmentId`
-  - `POST /services/assignments/:assignmentId/reassign`
-  
+Frontend route contracts and mappers are centralized in:
+
+- `src/app/services/contracts/routes.ts`
+- `src/app/services/contracts/mappers.ts`
+
+## Implemented backend domains
+
+- Auth (`/auth/*`): email/phone login, register, Google, magic link, refresh, logout, session, TOTP 2FA
+- Systems state (`/systems/*`)
+- Marketplace (`/marketplace/*`)
+- Access assignments (`/services/*`)
+- Public feedback (`/public/feedback/:qrToken`)

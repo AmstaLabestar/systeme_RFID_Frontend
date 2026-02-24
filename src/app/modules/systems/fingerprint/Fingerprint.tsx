@@ -9,6 +9,14 @@ export function Fingerprint({ devices }: FingerprintProps) {
   const [selectedDevice, setSelectedDevice] = useState<number | null>(null);
 
   const fingerprintDevices = devices.filter(d => d.type === 'fingerprint');
+  const usageSegmentCount = 20;
+  const confidenceSegmentCount = 10;
+
+  const getUsageColorClass = (usagePercent: number) =>
+    usagePercent > 80 ? 'bg-orange-500' : 'bg-green-600';
+
+  const getConfidenceColorClass = (confidence: number) =>
+    confidence > 90 ? 'bg-green-500' : confidence > 70 ? 'bg-yellow-500' : 'bg-red-500';
 
   // Mock fingerprint assignments
   const [assignments] = useState([
@@ -128,13 +136,19 @@ export function Fingerprint({ devices }: FingerprintProps) {
             <span>Disponibles</span>
             <span className="font-semibold text-green-600">{device.capacity - device.used}</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className={`h-2 rounded-full transition-all ${
-                usagePercent > 80 ? 'bg-orange-500' : 'bg-green-600'
-              }`}
-              style={{ width: `${usagePercent}%` }}
-            />
+          <div className="flex w-full gap-0.5">
+            {Array.from({ length: usageSegmentCount }).map((_, index) => {
+              const isFilled = index < Math.round(usagePercent / (100 / usageSegmentCount));
+
+              return (
+                <span
+                  key={index}
+                  className={`h-2 flex-1 rounded-sm ${
+                    isFilled ? getUsageColorClass(usagePercent) : 'bg-gray-200'
+                  }`}
+                />
+              );
+            })}
           </div>
         </div>
       </div>
@@ -332,15 +346,20 @@ export function Fingerprint({ devices }: FingerprintProps) {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className={`h-2 rounded-full ${
-                            record.confidence > 90 ? 'bg-green-500' : 
-                            record.confidence > 70 ? 'bg-yellow-500' : 
-                            'bg-red-500'
-                          }`}
-                          style={{ width: `${record.confidence}%` }}
-                        />
+                      <div className="flex w-16 gap-0.5">
+                        {Array.from({ length: confidenceSegmentCount }).map((_, index) => {
+                          const isFilled =
+                            index < Math.round(record.confidence / (100 / confidenceSegmentCount));
+
+                          return (
+                            <span
+                              key={`${record.id}-${index}`}
+                              className={`h-2 flex-1 rounded-sm ${
+                                isFilled ? getConfidenceColorClass(record.confidence) : 'bg-gray-200'
+                              }`}
+                            />
+                          );
+                        })}
                       </div>
                       <span className="text-xs font-medium text-gray-600">{record.confidence}%</span>
                     </div>

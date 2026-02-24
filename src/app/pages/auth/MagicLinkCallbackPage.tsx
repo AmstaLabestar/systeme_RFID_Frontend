@@ -5,19 +5,16 @@ import { useAuth } from '@/app/contexts';
 import { isTwoFactorChallenge } from '@/app/services';
 import { AuthShell } from './AuthShell';
 
-function getHashParams(hash: string): URLSearchParams {
-  return new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-}
-
-export function GoogleCallbackPage() {
+export function MagicLinkCallbackPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, completeGoogleOAuth } = useAuth();
+  const { isAuthenticated, completeMagicLink } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasProcessedRef = useRef(false);
 
-  const hashParams = useMemo(() => getHashParams(location.hash), [location.hash]);
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const token = searchParams.get('token');
+  const redirectTo = searchParams.get('redirectTo') || undefined;
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -30,57 +27,48 @@ export function GoogleCallbackPage() {
     }
     hasProcessedRef.current = true;
 
-    const providerError = hashParams.get('error') || searchParams.get('error');
-    const idToken = hashParams.get('id_token') || searchParams.get('id_token');
-    const state = hashParams.get('state') || searchParams.get('state');
-
-    if (providerError) {
-      setErrorMessage(`Connexion Google annulee (${providerError}).`);
-      return;
-    }
-
-    if (!idToken || !state) {
-      setErrorMessage('Reponse OAuth Google incomplete.');
+    if (!token) {
+      setErrorMessage('Token Magic Link manquant.');
       return;
     }
 
     void (async () => {
       try {
-        const result = await completeGoogleOAuth({ idToken, state });
+        const result = await completeMagicLink({ token, redirectTo });
         if (isTwoFactorChallenge(result)) {
-          toast.success('Connexion Google validee. Verification 2FA requise.');
+          toast.success('Magic Link valide. Verification 2FA requise.');
           navigate('/auth/login', {
             replace: true,
             state: {
-              from: result.redirectTo,
+              from: result.redirectTo || '/dashboard/overview',
               twoFactorChallenge: result,
             },
           });
           return;
         }
 
-        const redirectTo = result.redirectTo || '/dashboard/overview';
-        toast.success('Connexion Google reussie.');
+        const target = result.redirectTo || '/dashboard/overview';
+        toast.success('Connexion via Magic Link reussie.');
 
-        if (/^https?:\/\//i.test(redirectTo)) {
-          window.location.assign(redirectTo);
+        if (/^https?:\/\//i.test(target)) {
+          window.location.assign(target);
           return;
         }
 
-        navigate(redirectTo, { replace: true });
+        navigate(target, { replace: true });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Impossible de finaliser la connexion Google.';
+        const message = error instanceof Error ? error.message : 'Magic Link invalide ou expire.';
         setErrorMessage(message);
         toast.error(message);
       }
     })();
-  }, [completeGoogleOAuth, hashParams, isAuthenticated, navigate, searchParams]);
+  }, [completeMagicLink, isAuthenticated, navigate, redirectTo, token]);
 
   return (
     <AuthShell
-      title="Callback Google"
-      subtitle="Finalisation de la connexion OAuth..."
-      footerText="Retourner au formulaire classique ?"
+      title="Magic Link"
+      subtitle="Verification du lien de connexion..."
+      footerText="Retourner a la connexion classique ?"
       footerLinkLabel="Connexion email"
       footerLinkTo="/auth/login"
     >

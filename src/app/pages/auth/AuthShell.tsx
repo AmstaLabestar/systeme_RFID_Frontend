@@ -26,7 +26,9 @@ export function AuthShell({
         <div className="card border border-[var(--border-soft)] bg-[var(--card-bg)] shadow-2xl shadow-black/30">
           <div className="card-body gap-6 p-8">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Plateforme SaaS IoT</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+                Systeme de gestion d acces
+              </p>
               <h1 className="mt-2 text-3xl font-bold text-[var(--text-primary)]">{title}</h1>
               <p className="mt-2 text-sm text-[var(--text-secondary)]">{subtitle}</p>
             </div>

@@ -33,7 +33,7 @@ function buildWelcomeNotifications(scope: string): AppNotification[] {
     {
       id: `notif-welcome-${scope}`,
       title: 'Bienvenue',
-      message: 'Plateforme IoT initialisee. Utilisez le Marketplace pour demarrer vos modules.',
+      message: ' Utilisez le Marketplace pour demarrer vos modules.',
       kind: 'info',
       read: false,
       createdAt: new Date().toISOString(),

@@ -41,6 +41,7 @@ export interface DeviceUnit {
   name: string;
   location: string;
   provisionedMacAddress: string;
+  qrToken?: string;
   systemIdentifier?: string;
   configured: boolean;
   capacity: number;
@@ -88,12 +89,15 @@ export interface HistoryEvent {
 }
 
 export type FeedbackSentiment = 'negative' | 'neutral' | 'positive';
+export type FeedbackSource = 'BUTTON' | 'QR';
 
 export interface FeedbackRecord {
   id: string;
   deviceId: string;
   module: 'feedback';
   sentiment: FeedbackSentiment;
+  source?: FeedbackSource;
+  comment?: string;
   createdAt: string;
 }
 

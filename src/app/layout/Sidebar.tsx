@@ -51,8 +51,8 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             <Activity className="h-6 w-6 text-[var(--accent-primary)]" />
           </div>
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-[var(--text-secondary)]">SaaS IoT</p>
-            <h1 className="text-lg font-bold">Tech Souveraine</h1>
+            <p className="text-sm uppercase tracking-[0.2em] text-[var(--text-secondary)]">Système RFID</p>
+            <h1 className="text-lg font-bold">Tanga Group</h1>
           </div>
         </div>
       </div>
@@ -87,7 +87,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
 
       <div className="grid gap-4 border-t border-[var(--border-soft)] px-4 py-4">
         <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--card-bg)]/70 p-3">
-          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">Profil utilisateur</p>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">Profil</p>
           <div className="mt-3 flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--accent-primary)]/40 bg-[var(--accent-primary)]/15 text-sm font-semibold text-[var(--accent-primary)]">
               {userInitials}
@@ -112,7 +112,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
         </button>
 
-        <p className="px-2 text-xs text-[var(--text-secondary)]">Modules actifs selon achats et configuration.</p>
+        <p className="px-2 text-xs text-[var(--text-secondary)]">Modules actifs .</p>
       </div>
     </aside>
   );

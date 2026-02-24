@@ -8,9 +8,14 @@ import {
   ShoppingBag,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
-import type { SidebarItem } from '@/app/layout';
 import { Dashboard, FeedbackView, Fingerprint as FingerprintSystem, Marketplace, RFIDBadge, RFIDDoor, Settings } from '@/app/modules';
 import type { Device, PageId } from '@/app/shared/types';
+
+interface SidebarItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<any>;
+}
 
 type PurchaseHandler = (items: unknown[]) => void;
 

@@ -35,7 +35,7 @@ export function MarketplacePage() {
 
   const handlePurchase = async (productId: string) => {
     if (isProductSoldOut(productId)) {
-      toast.error('Ce materiel est deja epuise dans le mock et ne peut plus etre achete.');
+      toast.error('Ce materiel est epuise et ne peut plus etre achete.');
       return;
     }
 
@@ -104,7 +104,7 @@ export function MarketplacePage() {
                 <p className="text-2xl font-bold text-[var(--text-primary)]">{formatCurrencyFcfa(product.unitPrice)}</p>
                 {getProductRemainingStock(product.id) !== null ? (
                   <p className="text-xs text-[var(--text-secondary)]">
-                    Stock mock restant: <span className="font-semibold">{getProductRemainingStock(product.id)}</span>
+                    Stock restant: <span className="font-semibold">{getProductRemainingStock(product.id)}</span>
                   </p>
                 ) : null}
 
