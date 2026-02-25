@@ -1,8 +1,8 @@
-import { Bell, LogOut, Menu, Moon, Sun } from 'lucide-react';
+import { Bell, Languages, LogOut, Menu, Moon, Sun } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MODULE_LABELS } from '@/app/data';
-import { useAuth, useMarketplace, useNotifications, useThemeMode } from '@/app/contexts';
+import { MODULE_LABEL_KEYS } from '@/app/data';
+import { useAuth, useI18n, useMarketplace, useNotifications, useThemeMode } from '@/app/contexts';
 import { formatDateTime } from '@/app/services';
 import type { ModuleKey } from '@/app/types';
 
@@ -34,6 +34,7 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { locale, toggleLocale, t } = useI18n();
   const { inventory } = useMarketplace();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { mode, isDark, toggleMode } = useThemeMode();
@@ -42,6 +43,9 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
     () => resolveModuleFromPath(location.pathname),
     [location.pathname],
   );
+
+  const activeModuleLabel = activeModule ? t(MODULE_LABEL_KEYS[activeModule]) : '';
+  const targetTheme = isDark ? t('topbar.theme.light') : t('topbar.theme.dark');
 
   const moduleIdentifiers = useMemo(
     () =>
@@ -90,13 +94,17 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
             type="button"
             className="btn btn-ghost btn-square md:hidden"
             onClick={onOpenSidebar}
-            aria-label="Ouvrir la navigation"
+            aria-label={t('topbar.openNavigation')}
           >
             <Menu className="h-5 w-5" />
           </button>
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">Dashboard</p>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{user?.company ?? 'Workspace'}</h2>
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-secondary)]">
+              {t('topbar.dashboard')}
+            </p>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+              {user?.company ?? t('sidebar.workspaceFallback')}
+            </h2>
           </div>
         </div>
 
@@ -105,12 +113,25 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
             type="button"
             className="btn btn-ghost btn-circle md:btn-outline md:btn-sm md:w-auto md:px-3"
             onClick={toggleMode}
-            aria-label={`Activer le theme ${isDark ? 'clair' : 'sombre'}`}
-            title={`Theme: ${mode === 'dark' ? 'sombre' : 'clair'}`}
+            aria-label={t('topbar.activateTheme', { theme: targetTheme })}
+            title={t('topbar.themeTitle', { theme: targetTheme })}
           >
             {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-            <span className="hidden md:inline text-xs uppercase tracking-[0.1em]">
-              {mode === 'dark' ? 'Sombre' : 'Clair'}
+            <span className="hidden text-xs uppercase tracking-[0.1em] md:inline">
+              {mode === 'dark' ? t('topbar.theme.short.dark') : t('topbar.theme.short.light')}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-circle md:btn-outline md:btn-sm md:w-auto md:px-3"
+            onClick={toggleLocale}
+            aria-label={t('topbar.toggleLanguage')}
+            title={t('topbar.toggleLanguage')}
+          >
+            <Languages className="h-4 w-4" />
+            <span className="hidden text-xs uppercase tracking-[0.1em] md:inline">
+              {locale === 'fr' ? t('language.short.fr') : t('language.short.en')}
             </span>
           </button>
 
@@ -124,10 +145,10 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
             <div className="card dropdown-content z-[40] mt-3 w-96 border border-[var(--border-soft)] bg-[var(--card-bg)] shadow-xl">
               <div className="card-body gap-3 p-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Notifications</h3>
+                  <h3 className="text-sm font-semibold">{t('topbar.notifications')}</h3>
                   {unreadCount > 0 && (
                     <button type="button" className="link link-info text-xs" onClick={markAllAsRead}>
-                      Tout marquer lu
+                      {t('topbar.markAllRead')}
                     </button>
                   )}
                 </div>
@@ -136,7 +157,7 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
                   <div className="grid gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
                     <div>
                       <p className="text-xs uppercase tracking-[0.15em] text-[var(--text-secondary)]">
-                        Identifiants {MODULE_LABELS[activeModule]}
+                        {t('topbar.identifiersForModule', { module: activeModuleLabel })}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {moduleIdentifiers.length > 0 ? (
@@ -152,7 +173,7 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
                           ))
                         ) : (
                           <span className="text-xs text-[var(--text-secondary)]">
-                            Aucun identifiant livre pour ce module.
+                            {t('topbar.noIdentifiersForModule')}
                           </span>
                         )}
                       </div>
@@ -160,16 +181,16 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
 
                     <div className="flex items-center justify-between rounded-lg border border-[var(--border-soft)] bg-[var(--card-bg)] px-3 py-2 text-xs">
                       <span className="text-[var(--text-secondary)]">
-                        Disponibles: {moduleIdentifierSummary.available}
+                        {t('topbar.available', { count: moduleIdentifierSummary.available })}
                       </span>
                       <span className="font-semibold text-[var(--success-main)]">
-                        Utilises: {moduleIdentifierSummary.assigned}
+                        {t('topbar.used', { count: moduleIdentifierSummary.assigned })}
                       </span>
                     </div>
 
                     {moduleIdentifierSummary.total > 24 ? (
                       <p className="text-[11px] text-[var(--text-secondary)]">
-                        +{moduleIdentifierSummary.total - 24} identifiants supplementaires
+                        {t('topbar.moreIdentifiers', { count: moduleIdentifierSummary.total - 24 })}
                       </p>
                     ) : null}
                   </div>
@@ -194,7 +215,7 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
                           <p className="text-sm font-semibold text-[var(--text-primary)]">{notification.title}</p>
                           <p className="mt-1 text-xs text-[var(--text-secondary)]">{notification.message}</p>
                           <p className="mt-2 text-[11px] text-[var(--text-secondary)]">
-                            {formatDateTime(notification.createdAt)}
+                            {formatDateTime(notification.createdAt, locale === 'fr' ? 'fr-FR' : 'en-US')}
                           </p>
                         </button>
                       </li>
@@ -203,8 +224,8 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
                 ) : (
                   <p className="text-sm text-[var(--text-secondary)]">
                     {activeModule
-                      ? `Aucune notification recente pour ${MODULE_LABELS[activeModule]}.`
-                      : 'Aucune notification recente.'}
+                      ? t('topbar.noNotificationsForModule', { module: activeModuleLabel })
+                      : t('topbar.noNotifications')}
                   </p>
                 )}
               </div>
@@ -213,7 +234,7 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
 
           <button type="button" className="btn btn-outline btn-info" onClick={handleLogout}>
             <LogOut className="h-4 w-4" />
-            <span className="hidden md:inline">Deconnexion</span>
+            <span className="hidden md:inline">{t('topbar.logout')}</span>
           </button>
         </div>
       </div>

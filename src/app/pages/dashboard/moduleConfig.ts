@@ -3,31 +3,28 @@ import type { IdentifierType, ModuleKey } from '@/app/types';
 export const moduleContent: Record<
   Exclude<ModuleKey, 'feedback'>,
   {
-    title: string;
-    description: string;
+    titleKey: string;
+    descriptionKey: string;
     identifierType: IdentifierType;
-    assignmentLabel: string;
+    assignmentLabelKey: string;
   }
 > = {
   'rfid-presence': {
-    title: 'RFID Presence',
-    description:
-      'Associez badges RFID et employes, puis suivez les passages entree/sortie par boitier.',
+    titleKey: 'module.rfid-presence',
+    descriptionKey: 'access.module.rfidPresence.description',
     identifierType: 'badge-rfid',
-    assignmentLabel: 'badge',
+    assignmentLabelKey: 'access.assignment.badge',
   },
   'rfid-porte': {
-    title: 'RFID Porte',
-    description:
-      'Controlez les acces de porte, les autorisations et la tracabilite complete par boitier.',
+    titleKey: 'module.rfid-porte',
+    descriptionKey: 'access.module.rfidPorte.description',
     identifierType: 'serrure-rfid',
-    assignmentLabel: 'identifiant serrure',
+    assignmentLabelKey: 'access.assignment.lockIdentifier',
   },
   biometrie: {
-    title: 'Biometrie',
-    description:
-      'Pilotez la capacite d empreintes, les associations employes et l historique des passages.',
+    titleKey: 'module.biometrie',
+    descriptionKey: 'access.module.biometrie.description',
     identifierType: 'empreinte',
-    assignmentLabel: 'empreinte',
+    assignmentLabelKey: 'access.assignment.fingerprint',
   },
 };

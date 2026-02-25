@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './i18n';
 export * from './marketplace';
 export * from './notifications';
 export * from './services';

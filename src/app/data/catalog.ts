@@ -1,10 +1,28 @@
-import type { DashboardNavItem, IdentifierType, ModuleKey } from '@/app/types';
+import type { DashboardNavItem, DashboardPage, IdentifierType, ModuleKey } from '@/app/types';
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   'rfid-presence': 'RFID Presence',
   'rfid-porte': 'RFID Porte',
   biometrie: 'Biometrie',
   feedback: 'Feedback',
+};
+
+export const MODULE_LABEL_KEYS: Record<ModuleKey, string> = {
+  'rfid-presence': 'module.rfid-presence',
+  'rfid-porte': 'module.rfid-porte',
+  biometrie: 'module.biometrie',
+  feedback: 'module.feedback',
+};
+
+export const NAV_LABEL_KEYS: Record<DashboardPage, string> = {
+  overview: 'nav.overview',
+  marketplace: 'nav.marketplace',
+  'admin-stock': 'nav.adminStock',
+  'rfid-presence': 'nav.rfidPresence',
+  'rfid-porte': 'nav.rfidPorte',
+  biometrie: 'nav.biometrie',
+  feedback: 'nav.feedback',
+  historique: 'nav.historique',
 };
 
 export const MODULE_PATHS: Record<ModuleKey, string> = {

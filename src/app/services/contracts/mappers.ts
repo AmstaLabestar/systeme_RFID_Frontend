@@ -555,7 +555,8 @@ export function toProductList(value: unknown): Product[] {
         identifierType: identifierType || undefined,
         label: `Boitier ${systemName}`,
         description: `Boitier physique ${systemName} provisionne en stock reel.`,
-        unitPrice: Math.max(deviceUnitPriceCents, 0),
+        unitPriceMinor: Math.max(deviceUnitPriceCents, 0),
+        currency: asString(item.currency, 'XOF'),
         stockLimit: Math.max(availableDevices, 0),
         includedIdentifiers: Math.max(identifiersPerDevice, 0),
       });
@@ -569,7 +570,8 @@ export function toProductList(value: unknown): Product[] {
           identifierType: identifierType || undefined,
           label: `Extensions ${systemName}`,
           description: `Extensions physiques ${systemName} deja en stock reel.`,
-          unitPrice: Math.max(extensionUnitPriceCents, 0),
+          unitPriceMinor: Math.max(extensionUnitPriceCents, 0),
+          currency: asString(item.currency, 'XOF'),
           stockLimit: Math.max(availableExtensions, 0),
           quantityPerPack: 1,
         });
@@ -598,7 +600,19 @@ export function toProductList(value: unknown): Product[] {
       identifierType: identifierType || undefined,
       label: asString(pickFirstDefined(item.label, item.name), id),
       description: asString(item.description, ''),
-      unitPrice: asNumber(pickFirstDefined(item.unitPrice, item.unit_price, item.price), 0),
+      unitPriceMinor: asNumber(
+        pickFirstDefined(
+          item.unitPriceMinor,
+          item.unit_price_minor,
+          item.unitPriceCents,
+          item.unit_price_cents,
+          item.unitPrice,
+          item.unit_price,
+          item.price,
+        ),
+        0,
+      ),
+      currency: asString(item.currency, 'XOF'),
       stockLimit:
         pickFirstDefined(item.stockLimit, item.stock_limit) !== undefined
           ? asNumber(pickFirstDefined(item.stockLimit, item.stock_limit), 0)

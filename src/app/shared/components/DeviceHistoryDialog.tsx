@@ -1,4 +1,5 @@
 import { Download, X } from 'lucide-react';
+import { useI18n } from '@/app/contexts';
 import { formatDateTime } from '@/app/services';
 
 export interface DeviceHistoryDialogEntry {
@@ -25,11 +26,13 @@ export function DeviceHistoryDialog({
   deviceName,
   deviceId,
   systemIdentifier,
-  identifierLabel = 'Identifiant',
+  identifierLabel,
   entries,
   onClose,
   onDownloadPdf,
 }: DeviceHistoryDialogProps) {
+  const { locale, t } = useI18n();
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4">
       <div className="card h-[80vh] w-full max-w-5xl border border-[var(--border-soft)] bg-[var(--card-bg)] shadow-2xl">
@@ -39,8 +42,8 @@ export function DeviceHistoryDialog({
               <p className="text-xs uppercase tracking-[0.15em] text-[var(--text-secondary)]">{moduleLabel}</p>
               <h3 className="text-lg font-semibold text-[var(--text-primary)]">{deviceName}</h3>
               <p className="text-xs text-[var(--text-secondary)]">
-                ID: <span className="font-mono">{deviceId}</span> | MAC:{' '}
-                <span className="font-mono">{systemIdentifier ?? 'N/A'}</span>
+                {t('deviceHistory.id')}: <span className="font-mono">{deviceId}</span> | MAC:{' '}
+                <span className="font-mono">{systemIdentifier ?? t('marketplace.stock.na')}</span>
               </p>
             </div>
 
@@ -49,7 +52,7 @@ export function DeviceHistoryDialog({
                 <Download className="h-4 w-4" />
                 PDF
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label={t('common.close')}>
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -59,23 +62,23 @@ export function DeviceHistoryDialog({
             <table className="table">
               <thead>
                 <tr>
-                  <th>Date / Heure</th>
-                  <th>Acteur</th>
-                  <th>{identifierLabel}</th>
-                  <th>Action</th>
+                  <th>{t('table.dateTime')}</th>
+                  <th>{t('table.actor')}</th>
+                  <th>{identifierLabel ?? t('table.identifier')}</th>
+                  <th>{t('table.action')}</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="text-center text-sm text-[var(--text-secondary)]">
-                      Aucun evenement enregistre pour ce boitier.
+                      {t('deviceHistory.none')}
                     </td>
                   </tr>
                 ) : (
                   entries.map((entry) => (
                     <tr key={entry.id}>
-                      <td>{formatDateTime(entry.occurredAt)}</td>
+                      <td>{formatDateTime(entry.occurredAt, locale === 'fr' ? 'fr-FR' : 'en-US')}</td>
                       <td>{entry.actor}</td>
                       <td className="font-mono text-[var(--accent-primary)]">{entry.identifier}</td>
                       <td>{entry.action}</td>

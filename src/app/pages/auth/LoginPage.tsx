@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { useAuth } from '@/app/contexts';
+import { useAuth, useI18n } from '@/app/contexts';
 import {
   isGoogleOAuthConfigured,
   isTwoFactorChallenge,
@@ -63,6 +63,7 @@ function GoogleLogoIcon() {
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useI18n();
   const {
     isAuthenticated,
     signIn,
@@ -115,14 +116,14 @@ export function LoginPage() {
       if (isTwoFactorChallenge(result)) {
         setTwoFactorChallenge(result);
         setTwoFactorCode('');
-        toast.success('Authentification 2FA requise.');
+        toast.success(t('login.2faRequired'));
         return;
       }
 
-      toast.success('Connexion reussie.');
+      toast.success(t('login.success'));
       resolveRedirectTarget(result.redirectTo || redirectPath, navigate);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de se connecter.';
+      const message = error instanceof Error ? error.message : t('login.error');
       toast.error(message);
     }
   };
@@ -130,7 +131,7 @@ export function LoginPage() {
   const onRequestMagicLink = async () => {
     const identifier = getValues('identifier')?.trim();
     if (!identifier || !identifier.includes('@')) {
-      toast.error('Entrez une adresse email valide pour recevoir un Magic Link.');
+      toast.error(t('login.emailRequiredForMagicLink'));
       return;
     }
 
@@ -140,9 +141,9 @@ export function LoginPage() {
         email: identifier,
         redirectTo: redirectPath,
       });
-      toast.success(response.message || 'Magic Link envoye.');
+      toast.success(response.message || t('login.magicLinkSent'));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible d envoyer le Magic Link.';
+      const message = error instanceof Error ? error.message : t('login.magicLinkError');
       toast.error(message);
     } finally {
       setIsSendingMagicLink(false);
@@ -155,7 +156,7 @@ export function LoginPage() {
     }
 
     if (twoFactorCode.trim().length !== 6) {
-      toast.error('Le code 2FA doit contenir 6 chiffres.');
+      toast.error(t('login.invalidTwoFactorCode'));
       return;
     }
 
@@ -166,10 +167,10 @@ export function LoginPage() {
         code: twoFactorCode,
         redirectTo: twoFactorChallenge.redirectTo || redirectPath,
       });
-      toast.success('Connexion 2FA reussie.');
+      toast.success(t('login.2faSuccess'));
       resolveRedirectTarget(twoFactorChallenge.redirectTo || redirectPath, navigate);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Verification 2FA impossible.';
+      const message = error instanceof Error ? error.message : t('login.2faError');
       toast.error(message);
     } finally {
       setIsVerifyingTwoFactor(false);
@@ -186,7 +187,7 @@ export function LoginPage() {
       setIsGoogleRedirecting(true);
       startGoogleOAuth(redirectPath);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de se connecter.';
+      const message = error instanceof Error ? error.message : t('login.error');
       toast.error(message);
       setIsGoogleRedirecting(false);
     }
@@ -194,20 +195,16 @@ export function LoginPage() {
 
   return (
     <AuthShell
-      title="Connexion"
-      subtitle={
-        twoFactorChallenge
-          ? 'Verification 2FA requise: entrez le code TOTP a 6 chiffres de votre application Authenticator.'
-          : 'Accedez au dashboard et gerer vos service !'
-      }
-      footerText="Pas encore de compte ?"
-      footerLinkLabel="Creer un compte"
+      title={t('login.title')}
+      subtitle={twoFactorChallenge ? t('login.subtitle.2fa') : t('login.subtitle.default')}
+      footerText={t('login.footerText')}
+      footerLinkLabel={t('login.footerLink')}
       footerLinkTo="/auth/register"
     >
       {twoFactorChallenge ? (
         <div className="grid gap-4">
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Code 2FA (TOTP)</span>
+            <span className={fieldLabelClassName}>{t('login.twoFactorLabel')}</span>
             <input
               type="text"
               inputMode="numeric"
@@ -215,9 +212,7 @@ export function LoginPage() {
               className={fieldInputClassName}
               placeholder="000000"
               value={twoFactorCode}
-              onChange={(event) =>
-                setTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))
-              }
+              onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
             />
           </label>
 
@@ -227,7 +222,7 @@ export function LoginPage() {
             onClick={() => void onVerifyTwoFactor()}
             disabled={isVerifyingTwoFactor}
           >
-            {isVerifyingTwoFactor ? 'Verification...' : 'Valider la double authentification'}
+            {isVerifyingTwoFactor ? t('login.twoFactorVerifying') : t('login.twoFactorVerify')}
           </button>
 
           <button
@@ -236,32 +231,38 @@ export function LoginPage() {
             onClick={onRestartLogin}
             disabled={isVerifyingTwoFactor}
           >
-            Revenir a la connexion
+            {t('login.backToLogin')}
           </button>
         </div>
       ) : (
         <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Email ou telephone</span>
+            <span className={fieldLabelClassName}>{t('login.identifierLabel')}</span>
             <input
               type="text"
               className={fieldInputClassName}
-              placeholder="email@exemple.com ou +22670000000"
-              {...register('identifier', { required: 'Identifiant requis' })}
+              placeholder={t('login.identifierPlaceholder')}
+              {...register('identifier', { required: t('login.identifierRequired') })}
             />
             <span className={fieldErrorClassName}>{errors.identifier?.message ?? ''}</span>
           </label>
 
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Mot de passe</span>
+            <span className={fieldLabelClassName}>{t('login.passwordLabel')}</span>
             <input
               type="password"
               className={fieldInputClassName}
-              placeholder="********"
-              {...register('password', { required: 'Mot de passe requis', minLength: 8 })}
+              placeholder={t('login.passwordPlaceholder')}
+              {...register('password', {
+                required: t('login.passwordRequired'),
+                minLength: {
+                  value: 8,
+                  message: t('login.passwordInvalid'),
+                },
+              })}
             />
             <span className={fieldErrorClassName}>
-              {errors.password ? 'Mot de passe invalide.' : ''}
+              {errors.password ? t('login.passwordInvalid') : ''}
             </span>
           </label>
 
@@ -270,7 +271,7 @@ export function LoginPage() {
             className="btn btn-info w-full text-[var(--app-bg)]"
             disabled={isSubmitting || isGoogleRedirecting || isSendingMagicLink}
           >
-            {isSubmitting ? 'Connexion...' : 'Se connecter'}
+            {isSubmitting ? t('login.submitting') : t('login.submit')}
           </button>
 
           <button
@@ -279,13 +280,13 @@ export function LoginPage() {
             disabled={isSubmitting || isGoogleRedirecting || isSendingMagicLink}
             onClick={() => void onRequestMagicLink()}
           >
-            {isSendingMagicLink ? 'Envoi du Magic Link...' : 'Envoyer un Magic Link'}
+            {isSendingMagicLink ? t('login.magicLinkSending') : t('login.magicLinkSubmit')}
           </button>
 
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-[var(--border-soft)]" />
             <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
-              ou
+              {t('login.or')}
             </span>
             <span className="h-px flex-1 bg-[var(--border-soft)]" />
           </div>
@@ -299,7 +300,7 @@ export function LoginPage() {
                 onClick={onGoogleSignIn}
               >
                 <GoogleLogoIcon />
-                {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
+                {isGoogleRedirecting ? t('login.googleRedirecting') : t('login.googleContinue')}
               </button>
             ) : null}
           </div>
@@ -307,7 +308,7 @@ export function LoginPage() {
       )}
 
       <p className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--text-secondary)]">
-        Cette version utilise un 2FA TOTP standard (application Authenticator) apres la connexion.
+        {t('login.totpNotice')}
       </p>
     </AuthShell>
   );

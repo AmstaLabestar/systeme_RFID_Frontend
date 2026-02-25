@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { read, utils } from 'xlsx';
-import { useAuth } from '@/app/contexts';
+import { useAuth, useI18n } from '@/app/contexts';
 import {
   adminService,
   type AdminBulkDeviceItem,
@@ -118,6 +118,7 @@ function formatMoneyFromCents(cents: number, currency: string): string {
 
 export function AdminStockPage() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const { user } = useAuth();
   const role = user?.roleName?.trim().toLowerCase();
   const isAdmin = role === 'admin';
@@ -276,20 +277,22 @@ export function AdminStockPage() {
   const createSystemMutation = useMutation({
     mutationFn: adminService.createSystem,
     onSuccess: async () => {
-      toast.success('Systeme cree.');
+      toast.success(t('adminStock.toast.systemCreated'));
       await refreshAll();
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Creation impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.creationImpossible')),
   });
 
   const toggleSystemMutation = useMutation({
     mutationFn: ({ systemId, isActive }: { systemId: string; isActive: boolean }) =>
       adminService.updateSystemActivation(systemId, isActive),
     onSuccess: async () => {
-      toast.success('Activation systeme mise a jour.');
+      toast.success(t('adminStock.toast.systemActivationUpdated'));
       await refreshAll();
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Mise a jour impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.updateImpossible')),
   });
 
   const updateSystemPricingMutation = useMutation({
@@ -308,14 +311,14 @@ export function AdminStockPage() {
       setPendingPricingSystemId(systemId);
     },
     onSuccess: async () => {
-      toast.success('Tarification systeme mise a jour.');
+      toast.success(t('adminStock.toast.pricingUpdated'));
       await refreshAll();
     },
     onSettled: () => {
       setPendingPricingSystemId(null);
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Mise a jour tarification impossible.'),
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.pricingUpdateImpossible')),
   });
 
   const validateImportMutation = useMutation({
@@ -328,11 +331,12 @@ export function AdminStockPage() {
       setImportValidation(result);
       toast[result.canCommit ? 'success' : 'warning'](
         result.canCommit
-          ? 'Verification terminee: lot valide.'
-          : 'Verification terminee avec erreurs.',
+          ? t('adminStock.toast.validationCompletedValid')
+          : t('adminStock.toast.validationCompletedWithErrors'),
       );
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Validation impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.validationImpossible')),
   });
 
   const createDevicesMutation = useMutation({
@@ -351,7 +355,7 @@ export function AdminStockPage() {
         warehouseCode,
       }),
     onSuccess: async (response) => {
-      toast.success(`${Number(response.created ?? 0)} boitier(s) ajoute(s) au stock.`);
+      toast.success(t('adminStock.toast.devicesAdded', { count: Number(response.created ?? 0) }));
       setImportValidation(null);
       setImportRawInput('');
       setManualMacAddress('');
@@ -360,7 +364,8 @@ export function AdminStockPage() {
       setManualBatchDevices([]);
       await refreshAll();
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Ajout stock impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.stockAddImpossible')),
   });
 
   const createExtensionsMutation = useMutation({
@@ -381,14 +386,14 @@ export function AdminStockPage() {
         warehouseCode,
       }),
     onSuccess: async (response) => {
-      toast.success(`${Number(response.created ?? 0)} extension(s) ajoutee(s) au stock.`);
+      toast.success(t('adminStock.toast.extensionsAdded', { count: Number(response.created ?? 0) }));
       setManualExtensionInput('');
       setManualExtensionBatch([]);
       setExtensionRawInput('');
       await refreshAll();
     },
     onError: (error) =>
-      toast.error(error instanceof Error ? error.message : 'Ajout extensions impossible.'),
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.extensionsAddImpossible')),
   });
 
   const createWebhookMutation = useMutation({
@@ -400,11 +405,12 @@ export function AdminStockPage() {
         secret: webhookForm.secret.trim() || undefined,
       }),
     onSuccess: async () => {
-      toast.success('Webhook cree.');
+      toast.success(t('adminStock.toast.webhookCreated'));
       setWebhookForm((prev) => ({ ...prev, name: '', url: '', secret: '' }));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Creation webhook impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.webhookCreationImpossible')),
   });
 
   const toggleWebhookMutation = useMutation({
@@ -414,13 +420,14 @@ export function AdminStockPage() {
       setPendingWebhookAction({ webhookId, type: 'toggle' });
     },
     onSuccess: async () => {
-      toast.success('Activation webhook mise a jour.');
+      toast.success(t('adminStock.toast.webhookActivationUpdated'));
       await queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
     },
     onSettled: () => {
       setPendingWebhookAction(null);
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Mise a jour webhook impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.webhookUpdateImpossible')),
   });
 
   const testWebhookMutation = useMutation({
@@ -430,14 +437,15 @@ export function AdminStockPage() {
       setPendingWebhookAction({ webhookId, type: 'test' });
     },
     onSuccess: () => {
-      toast.success('Test webhook envoye.');
+      toast.success(t('adminStock.toast.webhookTestSent'));
       void queryClient.invalidateQueries({ queryKey: ['admin', 'webhooks'] });
       void queryClient.invalidateQueries({ queryKey: ['admin', 'logs'] });
     },
     onSettled: () => {
       setPendingWebhookAction(null);
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Test webhook impossible.'),
+    onError: (error) =>
+      toast.error(error instanceof Error ? error.message : t('adminStock.toast.webhookTestImpossible')),
   });
 
   const resetProvisionDraft = () => {
@@ -484,18 +492,20 @@ export function AdminStockPage() {
     }
 
     if (manualIdentifiers.length >= requiredIdentifiersPerDevice) {
-      toast.error(`Maximum ${requiredIdentifiersPerDevice} extension(s) pour ce boitier.`);
+      toast.error(
+        t('adminStock.toast.maxExtensionsPerDevice', { count: requiredIdentifiersPerDevice }),
+      );
       return;
     }
 
     const normalizedIdentifier = manualIdentifierInput.trim().toUpperCase();
     if (!normalizedIdentifier) {
-      toast.error('Saisissez un identifiant extension.');
+      toast.error(t('adminStock.toast.enterExtensionIdentifier'));
       return;
     }
 
     if (manualIdentifiers.includes(normalizedIdentifier)) {
-      toast.error('Extension dupliquee pour ce boitier.');
+      toast.error(t('adminStock.toast.duplicateExtensionForDevice'));
       return;
     }
 
@@ -509,13 +519,13 @@ export function AdminStockPage() {
 
   const handleAddManualDevice = () => {
     if (!importSystemId) {
-      toast.error('Selectionnez un systeme cible.');
+      toast.error(t('adminStock.toast.selectTargetSystem'));
       return;
     }
 
     const normalizedMacAddress = normalizeMacInput(manualMacAddress);
     if (!normalizedMacAddress) {
-      toast.error('Adresse MAC requise.');
+      toast.error(t('adminStock.toast.macRequired'));
       return;
     }
 
@@ -524,13 +534,16 @@ export function AdminStockPage() {
         (device) => normalizeMacInput(device.macAddress) === normalizedMacAddress,
       )
     ) {
-      toast.error('Ce boitier est deja dans le lot.');
+      toast.error(t('adminStock.toast.deviceAlreadyInBatch'));
       return;
     }
 
     if (selectedImportSystem?.hasIdentifiers && manualIdentifiers.length !== requiredIdentifiersPerDevice) {
       toast.error(
-        `${requiredIdentifiersPerDevice} extension(s) requise(s) pour ${selectedImportSystem.name}.`,
+        t('adminStock.toast.requiredExtensionsForSystem', {
+          count: requiredIdentifiersPerDevice,
+          system: selectedImportSystem.name,
+        }),
       );
       return;
     }
@@ -558,18 +571,18 @@ export function AdminStockPage() {
 
   const handleAddManualExtension = () => {
     if (!selectedExtensionSystem) {
-      toast.error('Selectionnez un systeme extension.');
+      toast.error(t('adminStock.toast.selectExtensionSystem'));
       return;
     }
 
     const normalizedIdentifier = manualExtensionInput.trim().toUpperCase();
     if (!normalizedIdentifier) {
-      toast.error('Saisissez un identifiant extension.');
+      toast.error(t('adminStock.toast.enterExtensionIdentifier'));
       return;
     }
 
     if (manualExtensionBatch.includes(normalizedIdentifier)) {
-      toast.error('Extension dupliquee dans le lot.');
+      toast.error(t('adminStock.toast.duplicateExtensionInBatch'));
       return;
     }
 
@@ -595,7 +608,7 @@ export function AdminStockPage() {
         const workbook = read(await file.arrayBuffer(), { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         if (!firstSheetName) {
-          toast.error('Le fichier XLSX ne contient aucune feuille.');
+          toast.error(t('adminStock.toast.xlsxNoSheet'));
           return;
         }
 
@@ -625,30 +638,30 @@ export function AdminStockPage() {
       }
 
       if (!content.trim()) {
-        toast.error('Le fichier est vide apres lecture.');
+        toast.error(t('adminStock.toast.fileEmptyAfterRead'));
         return;
       }
 
       setExtensionRawInput(content);
-      toast.success(`Fichier extensions charge: ${file.name}`);
+      toast.success(t('adminStock.toast.extensionsFileLoaded', { file: file.name }));
     } catch {
-      toast.error('Lecture du fichier extensions impossible.');
+      toast.error(t('adminStock.toast.extensionsFileReadImpossible'));
     }
   };
 
   const handleConfirmExtensions = () => {
     if (!selectedExtensionSystem) {
-      toast.error('Selectionnez un systeme extension.');
+      toast.error(t('adminStock.toast.selectExtensionSystem'));
       return;
     }
 
     if (extensionDraftIdentifiers.length === 0) {
-      toast.error('Ajoutez au moins une extension au lot.');
+      toast.error(t('adminStock.toast.addAtLeastOneExtension'));
       return;
     }
 
     if (duplicateExtensionIdentifiers.length > 0) {
-      toast.error('Le lot contient des extensions dupliquees.');
+      toast.error(t('adminStock.toast.batchContainsDuplicates'));
       return;
     }
 
@@ -662,16 +675,16 @@ export function AdminStockPage() {
 
   const handleVerifyImport = () => {
     if (!importSystemId) {
-      toast.error('Selectionnez un systeme cible.');
+      toast.error(t('adminStock.toast.selectTargetSystem'));
       return;
     }
     if (provisionMode === 'manual' && manualMacAddress.trim()) {
-      toast.error('Ajoutez le boitier en cours au lot avant verification.');
+      toast.error(t('adminStock.toast.addCurrentDeviceBeforeVerify'));
       return;
     }
     const rows = draftRows;
     if (rows.length === 0) {
-      toast.error('Ajoutez au moins une ligne.');
+      toast.error(t('adminStock.toast.addAtLeastOneRow'));
       return;
     }
     validateImportMutation.mutate({ systemId: importSystemId, rows });
@@ -691,7 +704,7 @@ export function AdminStockPage() {
         const workbook = read(await file.arrayBuffer(), { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         if (!firstSheetName) {
-          toast.error('Le fichier XLSX ne contient aucune feuille.');
+          toast.error(t('adminStock.toast.xlsxNoSheet'));
           return;
         }
 
@@ -718,20 +731,20 @@ export function AdminStockPage() {
       }
 
       if (!content.trim()) {
-        toast.error('Le fichier est vide apres lecture.');
+        toast.error(t('adminStock.toast.fileEmptyAfterRead'));
         return;
       }
 
       setImportRawInput(content);
-      toast.success(`Fichier charge: ${file.name}`);
+      toast.success(t('adminStock.toast.fileLoaded', { file: file.name }));
     } catch {
-      toast.error('Lecture du fichier impossible.');
+      toast.error(t('adminStock.toast.fileReadImpossible'));
     }
   };
 
   const handleConfirmImport = () => {
     if (!importSystemId || !importValidation?.canCommit) {
-      toast.error('Le lot doit etre valide avant confirmation.');
+      toast.error(t('adminStock.toast.validateBeforeConfirm'));
       return;
     }
     const devices = importValidation.rows
@@ -742,7 +755,7 @@ export function AdminStockPage() {
         warehouseCode: row.warehouseCode,
       }));
     if (devices.length === 0) {
-      toast.error('Aucun boitier valide a confirmer.');
+      toast.error(t('adminStock.toast.noValidDeviceToConfirm'));
       return;
     }
     createDevicesMutation.mutate({
@@ -754,18 +767,18 @@ export function AdminStockPage() {
 
   const handleCreateSystem = () => {
     if (!isAdmin) {
-      toast.error('Seul un admin peut creer un nouveau systeme.');
+      toast.error(t('adminStock.toast.onlyAdminCreateSystem'));
       return;
     }
 
     if (!createSystemPayload.name.trim()) {
-      toast.error('Nom systeme requis.');
+      toast.error(t('adminStock.toast.systemNameRequired'));
       return;
     }
 
     const normalizedCurrency = createSystemPayload.currency.trim().toUpperCase();
     if (normalizedCurrency.length !== 3) {
-      toast.error('Devise invalide. Utilisez 3 caracteres (ex: XOF).');
+      toast.error(t('adminStock.toast.invalidCurrency'));
       return;
     }
 
@@ -817,7 +830,7 @@ export function AdminStockPage() {
     const draft = pricingDraftsBySystemId[systemId];
 
     if (!system || !draft) {
-      toast.error('Systeme introuvable pour la mise a jour prix.');
+      toast.error(t('adminStock.toast.systemNotFoundForPricing'));
       return;
     }
 
@@ -826,7 +839,7 @@ export function AdminStockPage() {
     const currency = draft.currency.trim().toUpperCase();
 
     if (!Number.isInteger(deviceUnitPriceCents) || deviceUnitPriceCents < 0) {
-      toast.error('Prix boitier invalide (entier >= 0).');
+      toast.error(t('adminStock.toast.invalidDevicePrice'));
       return;
     }
 
@@ -834,12 +847,12 @@ export function AdminStockPage() {
       system.code !== 'FEEDBACK' &&
       (!Number.isInteger(extensionInputValue) || extensionInputValue < 0)
     ) {
-      toast.error('Prix extension invalide (entier >= 0).');
+      toast.error(t('adminStock.toast.invalidExtensionPrice'));
       return;
     }
 
     if (currency.length !== 3) {
-      toast.error('La devise doit contenir exactement 3 caracteres (ex: XOF).');
+      toast.error(t('adminStock.toast.currencyMustBe3Chars'));
       return;
     }
 
@@ -855,7 +868,7 @@ export function AdminStockPage() {
 
   const handleCreateWebhook = () => {
     if (!webhookForm.name.trim() || !webhookForm.url.trim()) {
-      toast.error('Nom et URL webhook requis.');
+      toast.error(t('adminStock.toast.webhookNameUrlRequired'));
       return;
     }
     createWebhookMutation.mutate();
@@ -897,12 +910,12 @@ export function AdminStockPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Admin Stock"
-          description="Gestion du stock reservee au role admin."
+          title={t('adminStock.title')}
+          description={t('adminStock.restricted.description')}
         />
         <EmptyState
-          title="Acces restreint"
-          description="Votre role n autorise pas le provisioning materiel."
+          title={t('adminStock.restricted.title')}
+          description={t('adminStock.restricted.emptyDescription')}
         />
       </div>
     );
@@ -911,8 +924,8 @@ export function AdminStockPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Admin Stock"
-        description="Assistant pro: Importer -> Verifier -> Confirmer, puis stock visible et allouable."
+        title={t('adminStock.title')}
+        description={t('adminStock.description')}
       />
 
       {(lowStockAlertsQuery.data ?? []).map((alert) => (
@@ -922,9 +935,14 @@ export function AdminStockPage() {
         >
           <AlertTriangle className="h-4 w-4" />
           <span>
-            {alert.systemName} ({alert.warehouseCode}) bas stock: boitiers={alert.availableDevices}, extensions=
-            {alert.availableExtensions}. Reappro conseille +{alert.recommendedDeviceRestock}/+
-            {alert.recommendedExtensionRestock}.
+            {t('adminStock.alert.lowStock', {
+              system: alert.systemName,
+              warehouse: alert.warehouseCode,
+              devices: alert.availableDevices,
+              extensions: alert.availableExtensions,
+              deviceRestock: alert.recommendedDeviceRestock,
+              extensionRestock: alert.recommendedExtensionRestock,
+            })}
           </span>
         </div>
       ))}
@@ -933,20 +951,20 @@ export function AdminStockPage() {
         <div className="card-body space-y-4 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`badge ${importStep >= 1 ? 'badge-info' : 'badge-outline'}`}>
-              1. Importer
+              1. {t('adminStock.steps.import')}
             </span>
             <span className={`badge ${importStep >= 2 ? 'badge-info' : 'badge-outline'}`}>
-              2. Verifier
+              2. {t('adminStock.steps.verify')}
             </span>
             <span className={`badge ${importStep >= 3 ? 'badge-success' : 'badge-outline'}`}>
-              3. Confirmer
+              3. {t('adminStock.steps.confirm')}
             </span>
           </div>
           <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-            Provisioning stock
+            {t('adminStock.provisioning.title')}
           </h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Selectionnez un systeme, preparez un lot (manuel ou CSV), puis validez et confirmez.
+            {t('adminStock.provisioning.description')}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -954,25 +972,27 @@ export function AdminStockPage() {
               className={`btn btn-sm ${provisionMode === 'manual' ? 'btn-info text-[var(--app-bg)]' : 'btn-outline'}`}
               onClick={() => handleProvisionModeChange('manual')}
             >
-              Saisie manuelle
+              {t('adminStock.mode.manual')}
             </button>
             <button
               type="button"
               className={`btn btn-sm ${provisionMode === 'csv' ? 'btn-info text-[var(--app-bg)]' : 'btn-outline'}`}
               onClick={() => handleProvisionModeChange('csv')}
             >
-              Import CSV/XLSX
+              {t('adminStock.mode.csv')}
             </button>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
             <label className="form-control">
-              <span className="label-text text-xs text-[var(--text-secondary)]">Systeme</span>
+              <span className="label-text text-xs text-[var(--text-secondary)]">
+                {t('adminStock.labels.system')}
+              </span>
               <select
                 className="select select-bordered mt-1 bg-[var(--surface-muted)]"
                 value={importSystemId}
                 onChange={(event) => handleImportSystemChange(event.target.value)}
               >
-                <option value="">Selectionner</option>
+                <option value="">{t('adminStock.labels.select')}</option>
                 {systems.map((system) => (
                   <option key={system.id} value={system.id}>
                     {system.name}
@@ -981,7 +1001,9 @@ export function AdminStockPage() {
               </select>
             </label>
             <label className="form-control">
-              <span className="label-text text-xs text-[var(--text-secondary)]">Entrepot</span>
+              <span className="label-text text-xs text-[var(--text-secondary)]">
+                {t('adminStock.labels.warehouse')}
+              </span>
               <input
                 className="input input-bordered mt-1 bg-[var(--surface-muted)]"
                 value={importWarehouseCode}
@@ -1090,7 +1112,7 @@ export function AdminStockPage() {
                   disabled={!importSystemId}
                   onClick={handleAddManualDevice}
                 >
-                  Ajouter ce boitier
+                  {t('adminStock.actions.addDevice')}
                 </button>
                 <button
                   type="button"
@@ -1101,7 +1123,7 @@ export function AdminStockPage() {
                     setManualIdentifiers([]);
                   }}
                 >
-                  Reinitialiser la saisie
+                  {t('adminStock.actions.resetInput')}
                 </button>
               </div>
 
@@ -1186,7 +1208,9 @@ export function AdminStockPage() {
               disabled={validateImportMutation.isPending || createDevicesMutation.isPending}
               onClick={handleVerifyImport}
             >
-              {validateImportMutation.isPending ? 'Verification...' : 'Verifier'}
+              {validateImportMutation.isPending
+                ? t('adminStock.actions.verifying')
+                : t('adminStock.actions.verify')}
             </button>
             <button
               type="button"
@@ -1195,14 +1219,16 @@ export function AdminStockPage() {
               onClick={handleConfirmImport}
             >
               <CheckCircle2 className="h-4 w-4" />
-              {createDevicesMutation.isPending ? 'Confirmation...' : 'Confirmer'}
+              {createDevicesMutation.isPending
+                ? t('adminStock.actions.confirming')
+                : t('adminStock.actions.confirm')}
             </button>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={resetProvisionDraft}
             >
-              Vider le lot
+              {t('adminStock.actions.clearBatch')}
             </button>
           </div>
 
@@ -1271,9 +1297,11 @@ export function AdminStockPage() {
 
       <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
         <div className="card-body space-y-4 p-5">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Provisioning extensions</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+            {t('adminStock.extensions.title')}
+          </h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Ajoutez des extensions libres au stock (saisie unitaire ou import CSV/XLSX).
+            {t('adminStock.extensions.description')}
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -1282,14 +1310,14 @@ export function AdminStockPage() {
               className={`btn btn-sm ${extensionProvisionMode === 'manual' ? 'btn-info text-[var(--app-bg)]' : 'btn-outline'}`}
               onClick={() => handleExtensionProvisionModeChange('manual')}
             >
-              Saisie manuelle
+              {t('adminStock.mode.manual')}
             </button>
             <button
               type="button"
               className={`btn btn-sm ${extensionProvisionMode === 'csv' ? 'btn-info text-[var(--app-bg)]' : 'btn-outline'}`}
               onClick={() => handleExtensionProvisionModeChange('csv')}
             >
-              Import CSV/XLSX
+              {t('adminStock.mode.csv')}
             </button>
           </div>
 
@@ -1431,14 +1459,16 @@ export function AdminStockPage() {
               }
               onClick={handleConfirmExtensions}
             >
-              {createExtensionsMutation.isPending ? 'Ajout en cours...' : 'Confirmer extensions'}
+              {createExtensionsMutation.isPending
+                ? t('adminStock.actions.confirmingExtensions')
+                : t('adminStock.actions.confirmExtensions')}
             </button>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={resetExtensionDraft}
             >
-              Vider le lot
+              {t('adminStock.actions.clearExtensionsBatch')}
             </button>
           </div>
 
@@ -1483,7 +1513,9 @@ export function AdminStockPage() {
         {isAdmin ? (
           <article className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
             <div className="card-body space-y-3 p-5">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)]">Nouveau systeme</h3>
+              <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+                {t('adminStock.newSystem.title')}
+              </h3>
               <input
                 className="input input-bordered bg-[var(--surface-muted)]"
                 value={createSystemPayload.name}
@@ -1598,7 +1630,7 @@ export function AdminStockPage() {
                 </label>
               </div>
               <button type="button" className="btn btn-info text-[var(--app-bg)]" onClick={handleCreateSystem}>
-                Creer systeme
+                {t('adminStock.actions.createSystem')}
               </button>
             </div>
           </article>
@@ -1607,9 +1639,9 @@ export function AdminStockPage() {
 
       <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
         <div className="card-body space-y-4 p-5">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Tarification stock</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t('adminStock.pricing.title')}</h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Source unique du prix utilisee par le marketplace.
+            {t('adminStock.pricing.description')}
           </p>
           <div className="overflow-x-auto rounded-xl border border-[var(--border-soft)]">
             <table className="table table-sm">
@@ -1702,7 +1734,7 @@ export function AdminStockPage() {
                           disabled={isPricingPending}
                           onClick={() => handleSaveSystemPricing(system.id)}
                         >
-                          {isPricingPending ? 'Enregistrement...' : 'Enregistrer'}
+                          {isPricingPending ? t('adminStock.actions.saving') : t('adminStock.actions.save')}
                         </button>
                       </td>
                     </tr>
@@ -1716,9 +1748,9 @@ export function AdminStockPage() {
 
       <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
         <div className="card-body space-y-3 p-5">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Inventaire materiel</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t('adminStock.inventory.title')}</h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Filtrez par systeme, statut, entrepot, MAC ou identifiant physique.
+            {t('adminStock.inventory.description')}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <select
@@ -1788,19 +1820,19 @@ export function AdminStockPage() {
                 {inventoryQuery.isLoading ? (
                   <tr>
                     <td colSpan={6} className="text-center text-sm text-[var(--text-secondary)]">
-                      Chargement inventaire...
+                      {t('adminStock.inventory.loading')}
                     </td>
                   </tr>
                 ) : inventoryQuery.isError ? (
                   <tr>
                     <td colSpan={6} className="text-center text-sm text-[var(--error-main)]">
-                      Echec chargement inventaire. Rafraichissez la page.
+                      {t('adminStock.inventory.error')}
                     </td>
                   </tr>
                 ) : (inventoryQuery.data?.items ?? []).length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center text-sm text-[var(--text-secondary)]">
-                      Aucun boitier pour ces filtres.
+                      {t('adminStock.inventory.empty')}
                     </td>
                   </tr>
                 ) : (
@@ -1819,7 +1851,7 @@ export function AdminStockPage() {
                           className="btn btn-outline btn-xs"
                           onClick={() => setSelectedDeviceId(device.id)}
                         >
-                          Detail
+                          {t('adminStock.inventory.detail')}
                         </button>
                       </td>
                     </tr>
@@ -1845,7 +1877,7 @@ export function AdminStockPage() {
                   }))
                 }
               >
-                Precedent
+                {t('adminStock.pagination.previous')}
               </button>
               <span className="text-[var(--text-secondary)]">
                 Page {inventoryFilters.page ?? 1} / {totalInventoryPages}
@@ -1861,7 +1893,7 @@ export function AdminStockPage() {
                   }))
                 }
               >
-                Suivant
+                {t('adminStock.pagination.next')}
               </button>
             </div>
           </div>
@@ -1870,17 +1902,17 @@ export function AdminStockPage() {
 
       <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
         <div className="card-body p-5">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Journal metier</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t('adminStock.logs.title')}</h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Qui a fait quoi, quand, et sur quel type de ressource.
+            {t('adminStock.logs.description')}
           </p>
           <div className="mt-3 space-y-2 text-sm">
             {adminLogsQuery.isLoading ? (
-              <p className="text-sm text-[var(--text-secondary)]">Chargement du journal...</p>
+              <p className="text-sm text-[var(--text-secondary)]">{t('adminStock.logs.loading')}</p>
             ) : adminLogsQuery.isError ? (
-              <p className="text-sm text-[var(--error-main)]">Impossible de charger le journal.</p>
+              <p className="text-sm text-[var(--error-main)]">{t('adminStock.logs.error')}</p>
             ) : (adminLogsQuery.data?.items ?? []).length === 0 ? (
-              <p className="text-sm text-[var(--text-secondary)]">Aucune action admin enregistree pour le moment.</p>
+              <p className="text-sm text-[var(--text-secondary)]">{t('adminStock.logs.empty')}</p>
             ) : (
               (adminLogsQuery.data?.items ?? []).map((log) => (
                 <div key={log.id} className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
@@ -1908,9 +1940,9 @@ export function AdminStockPage() {
 
       <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
         <div className="card-body space-y-4 p-5">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">Webhooks</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t('adminStock.webhooks.title')}</h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Evenements sortants pour l orchestration externe (ERP, logistique, notifications).
+            {t('adminStock.webhooks.description')}
           </p>
           <div className="grid gap-2 md:grid-cols-3">
             <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
@@ -1970,11 +2002,13 @@ export function AdminStockPage() {
             disabled={createWebhookMutation.isPending || !canCreateWebhook}
             onClick={handleCreateWebhook}
           >
-            {createWebhookMutation.isPending ? 'Creation...' : 'Ajouter webhook'}
+            {createWebhookMutation.isPending
+              ? t('adminStock.webhooks.actions.creating')
+              : t('adminStock.webhooks.actions.add')}
           </button>
           {pendingWebhookAction ? (
             <p className="text-xs text-[var(--text-secondary)]">
-              Operation en cours sur le webhook selectionne...
+              {t('adminStock.webhooks.pendingAction')}
             </p>
           ) : null}
 
@@ -1995,19 +2029,19 @@ export function AdminStockPage() {
                 {webhooksQuery.isLoading ? (
                   <tr>
                     <td colSpan={7} className="text-center text-sm text-[var(--text-secondary)]">
-                      Chargement webhooks...
+                      {t('adminStock.webhooks.loading')}
                     </td>
                   </tr>
                 ) : webhooksQuery.isError ? (
                   <tr>
                     <td colSpan={7} className="text-center text-sm text-[var(--error-main)]">
-                      Echec chargement webhooks.
+                      {t('adminStock.webhooks.error')}
                     </td>
                   </tr>
                 ) : webhooks.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="text-center text-sm text-[var(--text-secondary)]">
-                      Aucun webhook configure. Ajoutez un endpoint pour activer les integrations externes.
+                      {t('adminStock.webhooks.empty')}
                     </td>
                   </tr>
                 ) : (
@@ -2036,7 +2070,9 @@ export function AdminStockPage() {
                         </td>
                         <td>
                           <span className={`badge ${webhook.isActive ? 'badge-success' : 'badge-warning'}`}>
-                            {webhook.isActive ? 'Actif' : 'Inactif'}
+                            {webhook.isActive
+                              ? t('adminStock.webhooks.status.active')
+                              : t('adminStock.webhooks.status.inactive')}
                           </span>
                         </td>
                         <td>{webhook.lastDeliveredAt ? formatDateTime(webhook.lastDeliveredAt) : 'Jamais'}</td>
@@ -2054,7 +2090,11 @@ export function AdminStockPage() {
                                 })
                               }
                             >
-                              {isTogglePending ? 'Mise a jour...' : webhook.isActive ? 'Desactiver' : 'Activer'}
+                              {isTogglePending
+                                ? t('adminStock.webhooks.actions.toggleUpdating')
+                                : webhook.isActive
+                                  ? t('adminStock.webhooks.actions.disable')
+                                  : t('adminStock.webhooks.actions.enable')}
                             </button>
                             <button
                               type="button"
@@ -2067,7 +2107,9 @@ export function AdminStockPage() {
                                 })
                               }
                             >
-                              {isTestPending ? 'Test en cours...' : 'Tester'}
+                              {isTestPending
+                                ? t('adminStock.webhooks.actions.testing')
+                                : t('adminStock.webhooks.actions.test')}
                             </button>
                           </div>
                         </td>
@@ -2121,21 +2163,21 @@ export function AdminStockPage() {
             <div className="card-body space-y-3 p-5">
               <div className="flex justify-end">
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDeviceId(null)}>
-                  Fermer
+                  {t('adminStock.deviceModal.close')}
                 </button>
               </div>
               {deviceDetailQuery.isLoading ? (
-                <p className="text-sm text-[var(--text-secondary)]">Chargement detail boitier...</p>
+                <p className="text-sm text-[var(--text-secondary)]">{t('adminStock.deviceModal.loading')}</p>
               ) : deviceDetailQuery.isError ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-[var(--error-main)]">Impossible de charger ce boitier.</p>
+                  <p className="text-sm text-[var(--error-main)]">{t('adminStock.deviceModal.error')}</p>
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => deviceDetailQuery.refetch()}>
-                    Reessayer
+                    {t('adminStock.deviceModal.retry')}
                   </button>
                 </div>
               ) : !selectedDeviceDetail ? (
                 <p className="text-sm text-[var(--text-secondary)]">
-                  Aucun detail disponible pour ce boitier.
+                  {t('adminStock.deviceModal.empty')}
                 </p>
               ) : (
                 <>
@@ -2234,7 +2276,7 @@ export function AdminStockPage() {
       {createDevicesMutation.isSuccess ? (
         <div className="alert border-[var(--success-main)]/40 bg-[var(--success-main)]/10 text-[var(--text-primary)]">
           <CheckCircle2 className="h-4 w-4" />
-          <span>Allocation-ready: le materiel importe est maintenant vendable.</span>
+          <span>{t('adminStock.success.allocationReady')}</span>
         </div>
       ) : null}
     </div>

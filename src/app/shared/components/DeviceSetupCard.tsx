@@ -1,6 +1,7 @@
 import { CheckCircle2, Link2, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useI18n } from '@/app/contexts';
 import type { DeviceConfigurationInput, DeviceUnit } from '@/app/types';
 
 interface DeviceSetupFormValues extends DeviceConfigurationInput {}
@@ -17,6 +18,7 @@ function normalizeMacAddress(value: string): string {
 }
 
 export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
 
   const {
@@ -52,24 +54,24 @@ export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
               </div>
               <div>
                 <h3 className="font-semibold text-[var(--text-primary)]">{device.name}</h3>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Systeme achete mais inactif. Activez-le avec la MAC livree.
-                </p>
+                <p className="text-xs text-[var(--text-secondary)]">{t('deviceSetup.inactiveHint')}</p>
               </div>
             </div>
 
             <button type="button" className="btn btn-info text-[var(--app-bg)]" onClick={() => setIsOpen(true)}>
               <Link2 className="h-4 w-4" />
-              Activer
+              {t('deviceSetup.activate')}
             </button>
           </div>
 
           <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--text-secondary)]">
             <p>
-              MAC livree: <span className="font-mono text-[var(--text-primary)]">{device.provisionedMacAddress}</span>
+              {t('deviceSetup.deliveredMac')}{' '}
+              <span className="font-mono text-[var(--text-primary)]">{device.provisionedMacAddress}</span>
             </p>
             <p className="mt-1">
-              ID boitier: <span className="font-mono text-[var(--text-primary)]">{device.id}</span>
+              {t('deviceSetup.deviceId')}{' '}
+              <span className="font-mono text-[var(--text-primary)]">{device.id}</span>
             </p>
           </div>
         </div>
@@ -80,29 +82,33 @@ export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
           <div className="card w-full max-w-2xl border border-[var(--border-soft)] bg-[var(--card-bg)] shadow-2xl">
             <div className="card-body gap-5">
               <div>
-                <h3 className="text-lg font-semibold text-[var(--text-primary)]">Activation du boitier</h3>
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Renseignez les donnees physiques pour relier le systeme au dashboard.
-                </p>
+                <h3 className="text-lg font-semibold text-[var(--text-primary)]">{t('deviceSetup.dialog.title')}</h3>
+                <p className="text-sm text-[var(--text-secondary)]">{t('deviceSetup.dialog.description')}</p>
               </div>
 
               <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
                 <label className="form-control">
-                  <span className="label-text text-xs text-[var(--text-secondary)]">Nom du boitier</span>
+                  <span className="label-text text-xs text-[var(--text-secondary)]">
+                    {t('deviceSetup.form.deviceName')}
+                  </span>
                   <input
                     className="input input-bordered mt-1 bg-[var(--surface-muted)]"
-                    placeholder="Boitier Presence Hall"
-                    {...register('name', { required: 'Nom requis' })}
+                    placeholder={t('deviceSetup.form.deviceNamePlaceholder')}
+                    {...register('name', { required: t('deviceSetup.form.deviceNameRequired') })}
                   />
-                  {errors.name ? <span className="mt-1 text-xs text-[var(--error-main)]">{errors.name.message}</span> : null}
+                  {errors.name ? (
+                    <span className="mt-1 text-xs text-[var(--error-main)]">{errors.name.message}</span>
+                  ) : null}
                 </label>
 
                 <label className="form-control">
-                  <span className="label-text text-xs text-[var(--text-secondary)]">Emplacement</span>
+                  <span className="label-text text-xs text-[var(--text-secondary)]">
+                    {t('deviceSetup.form.location')}
+                  </span>
                   <input
                     className="input input-bordered mt-1 bg-[var(--surface-muted)]"
-                    placeholder="Reception"
-                    {...register('location', { required: 'Emplacement requis' })}
+                    placeholder={t('deviceSetup.form.locationPlaceholder')}
+                    {...register('location', { required: t('deviceSetup.form.locationRequired') })}
                   />
                   {errors.location ? (
                     <span className="mt-1 text-xs text-[var(--error-main)]">{errors.location.message}</span>
@@ -111,27 +117,29 @@ export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
 
                 <label className="form-control md:col-span-2">
                   <span className="label-text text-xs text-[var(--text-secondary)]">
-                    Adresse MAC livree (ID d activation)
+                    {t('deviceSetup.form.macLabel')}
                   </span>
                   <input
                     className="input input-bordered mt-1 bg-[var(--surface-muted)] font-mono uppercase"
                     placeholder="AA:BB:CC:DD:EE:FF"
                     {...register('systemIdentifier', {
-                      required: 'Identifiant systeme requis',
+                      required: t('deviceSetup.form.systemIdentifierRequired'),
                       validate: (value) => {
                         const normalized = normalizeMacAddress(value);
                         return (
                           MAC_INPUT_REGEX.test(normalized) &&
                           normalized === device.provisionedMacAddress
-                        ) || 'La MAC doit correspondre a la MAC livree.';
+                        ) || t('deviceSetup.form.macMustMatch');
                       },
                     })}
                   />
                   {errors.systemIdentifier ? (
-                    <span className="mt-1 text-xs text-[var(--error-main)]">{errors.systemIdentifier.message}</span>
+                    <span className="mt-1 text-xs text-[var(--error-main)]">
+                      {errors.systemIdentifier.message}
+                    </span>
                   ) : (
                     <span className="mt-1 text-xs text-[var(--text-secondary)]">
-                      Saisissez exactement la MAC livree avec le boitier pour valider l activation.
+                      {t('deviceSetup.form.macExactHint')}
                     </span>
                   )}
                 </label>
@@ -139,11 +147,11 @@ export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
                 <div className="flex items-center gap-2 md:col-span-2">
                   <button type="submit" className="btn btn-info text-[var(--app-bg)]" disabled={isSubmitting}>
                     <CheckCircle2 className="h-4 w-4" />
-                    {isSubmitting ? 'Activation...' : 'Confirmer l activation'}
+                    {isSubmitting ? t('deviceSetup.form.activating') : t('deviceSetup.form.confirmActivation')}
                   </button>
 
                   <button type="button" className="btn btn-ghost" onClick={() => setIsOpen(false)}>
-                    Fermer
+                    {t('common.close')}
                   </button>
                 </div>
               </form>

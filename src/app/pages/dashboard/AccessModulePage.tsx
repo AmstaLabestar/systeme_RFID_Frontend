@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { MODULE_LABELS } from '@/app/data';
-import { useMarketplace, useServices } from '@/app/contexts';
+import { MODULE_LABEL_KEYS } from '@/app/data';
+import { useI18n, useMarketplace, useServices } from '@/app/contexts';
 import { downloadDeviceHistoryPdf, formatDateTime } from '@/app/services';
 import type { ModuleKey } from '@/app/types';
 import {
@@ -29,6 +29,7 @@ interface AssignmentFormValues {
 
 export function AccessModulePage({ module }: AccessModulePageProps) {
   const navigate = useNavigate();
+  const { locale, t } = useI18n();
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
   const [historyDeviceId, setHistoryDeviceId] = useState<string | null>(null);
 
@@ -51,6 +52,9 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   } = useServices();
 
   const content = moduleContent[module];
+  const contentTitle = t(content.titleKey);
+  const contentDescription = t(content.descriptionKey);
+  const assignmentLabel = t(content.assignmentLabelKey);
 
   const moduleDevices = getDevicesByModule(module, false);
   const pendingDevices = moduleDevices.filter((device) => !device.configured);
@@ -140,7 +144,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
       await configureDevice(deviceId, values);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Activation impossible.';
+      const message = error instanceof Error ? error.message : t('access.errors.activationImpossible');
       toast.error(message);
       return false;
     }
@@ -179,7 +183,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
         identifierId: '',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Operation impossible.';
+      const message = error instanceof Error ? error.message : t('access.errors.operationImpossible');
       toast.error(message);
     }
   };
@@ -191,7 +195,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
         setEditingAssignmentId(null);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Suppression impossible.';
+      const message = error instanceof Error ? error.message : t('access.errors.deleteImpossible');
       toast.error(message);
     }
   };
@@ -203,7 +207,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     const device = configuredDevices.find((candidate) => candidate.id === deviceId);
 
     if (!device) {
-      toast.error('Boitier introuvable.');
+      toast.error(t('access.errors.deviceNotFound'));
       return;
     }
 
@@ -215,7 +219,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     }));
 
     downloadDeviceHistoryPdf({
-      moduleLabel: MODULE_LABELS[module],
+      moduleLabel: t(MODULE_LABEL_KEYS[module]),
       deviceName: device.name,
       deviceId: device.id,
       systemIdentifier: device.systemIdentifier,
@@ -231,13 +235,17 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   if (moduleDevices.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader title={content.title} description={content.description} />
+        <PageHeader title={contentTitle} description={contentDescription} />
         <EmptyState
-          title="Aucun boitier achete"
-          description="Ce module est disponible apres achat dans le Marketplace."
+          title={t('access.empty.noDevice.title')}
+          description={t('access.empty.noDevice.description')}
           action={
-            <button type="button" className="btn btn-info text-[var(--app-bg)]" onClick={() => navigate('/dashboard/marketplace')}>
-              Ouvrir le Marketplace
+            <button
+              type="button"
+              className="btn btn-info text-[var(--app-bg)]"
+              onClick={() => navigate('/dashboard/marketplace')}
+            >
+              {t('access.empty.noDevice.action')}
             </button>
           }
         />
@@ -248,18 +256,24 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={content.title}
-        description={content.description}
+        title={contentTitle}
+        description={contentDescription}
         actions={
-          <button type="button" className="btn btn-outline btn-info" onClick={() => navigate('/dashboard/marketplace')}>
-            Acheter des identifiants
+          <button
+            type="button"
+            className="btn btn-outline btn-info"
+            onClick={() => navigate('/dashboard/marketplace')}
+          >
+            {t('access.actions.buyIdentifiers')}
           </button>
         }
       />
 
       {pendingDevices.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--warning-main)]">Activation des boitiers</h2>
+          <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--warning-main)]">
+            {t('access.pendingActivation.title')}
+          </h2>
           <div className="grid gap-4">
             {pendingDevices.map((device) => (
               <DeviceSetupCard key={device.id} device={device} onConfigure={handleConfigureDevice} />
@@ -270,8 +284,8 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
       {configuredDevices.length === 0 ? (
         <EmptyState
-          title="Activation requise"
-          description="Activez au moins un boitier avec son identifiant systeme (MAC) pour utiliser ce service."
+          title={t('access.empty.activationRequired.title')}
+          description={t('access.empty.activationRequired.description')}
         />
       ) : (
         <>
@@ -288,20 +302,22 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                     <h3 className="text-base font-semibold text-[var(--text-primary)]">{device.name}</h3>
                     <p className="text-xs text-[var(--text-secondary)]">{device.location}</p>
                     <p className="mt-1 font-mono text-xs text-[var(--accent-primary)]">
-                      MAC: {device.systemIdentifier ?? 'N/A'}
+                      MAC: {device.systemIdentifier ?? t('marketplace.stock.na')}
                     </p>
-                  <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
+                    <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-                        <p className="text-[var(--text-secondary)]">Capacite</p>
+                        <p className="text-[var(--text-secondary)]">{t('access.deviceCard.capacity')}</p>
                         <p className="text-lg font-bold text-[var(--text-primary)]">{capacity}</p>
                       </div>
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-                        <p className="text-[var(--text-secondary)]">Associes</p>
+                        <p className="text-[var(--text-secondary)]">{t('access.deviceCard.assigned')}</p>
                         <p className="text-lg font-bold text-[var(--success-main)]">{assigned}</p>
                       </div>
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-                        <p className="text-[var(--text-secondary)]">Restants</p>
-                        <p className="text-lg font-bold text-[var(--accent-primary)]">{Math.max(capacity - assigned, 0)}</p>
+                        <p className="text-[var(--text-secondary)]">{t('access.deviceCard.remaining')}</p>
+                        <p className="text-lg font-bold text-[var(--accent-primary)]">
+                          {Math.max(capacity - assigned, 0)}
+                        </p>
                       </div>
                     </div>
 
@@ -312,7 +328,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                         onClick={() => setHistoryDeviceId(device.id)}
                       >
                         <History className="h-3 w-3" />
-                        Historique
+                        {t('common.history')}
                       </button>
                       <button
                         type="button"
@@ -332,15 +348,17 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
           <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
             <div className="card-body p-5">
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                {editingAssignmentId ? 'Reattribuer un identifiant' : `Associer un ${content.assignmentLabel}`}
+                {editingAssignmentId
+                  ? t('access.form.reassignTitle')
+                  : t('access.form.assignTitle', { label: assignmentLabel })}
               </h2>
 
               <form className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={handleSubmit(onSubmit)}>
                 <label className="form-control">
-                  <span className="label-text text-xs text-[var(--text-secondary)]">Prenom</span>
+                  <span className="label-text text-xs text-[var(--text-secondary)]">{t('form.firstName')}</span>
                   <input
                     className="input input-bordered mt-1 bg-[var(--surface-muted)]"
-                    {...register('firstName', { required: 'Prenom requis' })}
+                    {...register('firstName', { required: t('form.firstNameRequired') })}
                   />
                   {errors.firstName ? (
                     <span className="mt-1 text-xs text-[var(--error-main)]">{errors.firstName.message}</span>
@@ -348,10 +366,10 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                 </label>
 
                 <label className="form-control">
-                  <span className="label-text text-xs text-[var(--text-secondary)]">Nom</span>
+                  <span className="label-text text-xs text-[var(--text-secondary)]">{t('form.lastName')}</span>
                   <input
                     className="input input-bordered mt-1 bg-[var(--surface-muted)]"
-                    {...register('lastName', { required: 'Nom requis' })}
+                    {...register('lastName', { required: t('form.lastNameRequired') })}
                   />
                   {errors.lastName ? (
                     <span className="mt-1 text-xs text-[var(--error-main)]">{errors.lastName.message}</span>
@@ -359,12 +377,12 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                 </label>
 
                 <label className="form-control">
-                  <span className="label-text text-xs text-[var(--text-secondary)]">Boitier</span>
+                  <span className="label-text text-xs text-[var(--text-secondary)]">{t('table.device')}</span>
                   <select
                     className="select select-bordered mt-1 bg-[var(--surface-muted)]"
-                    {...register('deviceId', { required: 'Boitier requis' })}
+                    {...register('deviceId', { required: t('access.form.deviceRequired') })}
                   >
-                    <option value="">Selectionner</option>
+                    <option value="">{t('form.select')}</option>
                     {configuredDevices.map((device) => (
                       <option key={device.id} value={device.id}>
                         {device.name}
@@ -377,13 +395,13 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                 </label>
 
                 <label className="form-control">
-                  <span className="label-text text-xs text-[var(--text-secondary)]">Identifiant</span>
+                  <span className="label-text text-xs text-[var(--text-secondary)]">{t('table.identifier')}</span>
                   <select
                     className="select select-bordered mt-1 bg-[var(--surface-muted)]"
                     disabled={Boolean(editingAssignmentId)}
-                    {...register('identifierId', { required: 'Identifiant requis' })}
+                    {...register('identifierId', { required: t('access.form.identifierRequired') })}
                   >
-                    <option value="">Selectionner</option>
+                    <option value="">{t('form.select')}</option>
                     {identifierOptions.map((identifier) => (
                       <option key={identifier.id} value={identifier.id}>
                         {identifier.code}
@@ -397,7 +415,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
                 <div className="flex items-center gap-2 xl:col-span-4">
                   <button type="submit" className="btn btn-info text-[var(--app-bg)]" disabled={isSubmitting}>
-                    {editingAssignmentId ? 'Valider la reattribution' : 'Associer'}
+                    {editingAssignmentId ? t('access.form.validateReassign') : t('access.form.assign')}
                   </button>
 
                   {editingAssignmentId ? (
@@ -406,17 +424,20 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                       className="btn btn-outline"
                       onClick={() => {
                         setEditingAssignmentId(null);
-                        reset({ firstName: '', lastName: '', deviceId: configuredDevices[0]?.id ?? '', identifierId: '' });
+                        reset({
+                          firstName: '',
+                          lastName: '',
+                          deviceId: configuredDevices[0]?.id ?? '',
+                          identifierId: '',
+                        });
                       }}
                     >
-                      Annuler
+                      {t('common.cancel')}
                     </button>
                   ) : null}
 
                   {!identifierOptions.length ? (
-                    <span className="text-xs text-[var(--warning-main)]">
-                      Aucun identifiant disponible. Achetez un pack supplementaire.
-                    </span>
+                    <span className="text-xs text-[var(--warning-main)]">{t('access.form.noIdentifierAvailable')}</span>
                   ) : null}
                 </div>
               </form>
@@ -426,17 +447,19 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
           <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
             <div className="card-body p-0">
               <div className="px-5 py-4">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Associations actives</h2>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                  {t('access.activeAssignments.title')}
+                </h2>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Employee</th>
-                      <th>Identifiant</th>
-                      <th>Boitier</th>
-                      <th>Date</th>
+                      <th>{t('table.employee')}</th>
+                      <th>{t('table.identifier')}</th>
+                      <th>{t('table.device')}</th>
+                      <th>{t('table.date')}</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -444,7 +467,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                     {moduleAssignments.length === 0 && (
                       <tr>
                         <td colSpan={5} className="text-center text-sm text-[var(--text-secondary)]">
-                          Aucune association active.
+                          {t('access.activeAssignments.none')}
                         </td>
                       </tr>
                     )}
@@ -458,7 +481,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                           <td>{employee?.fullName ?? '-'}</td>
                           <td className="font-mono text-[var(--accent-primary)]">{identifier?.code ?? '-'}</td>
                           <td>{device?.name ?? '-'}</td>
-                          <td>{formatDateTime(assignment.updatedAt)}</td>
+                          <td>{formatDateTime(assignment.updatedAt, locale === 'fr' ? 'fr-FR' : 'en-US')}</td>
                           <td>
                             <div className="flex items-center gap-2">
                               <button
@@ -467,7 +490,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                                 onClick={() => setEditingAssignmentId(assignment.id)}
                               >
                                 <ArrowRightLeft className="h-3 w-3" />
-                                Reattribuer
+                                {t('access.activeAssignments.reassign')}
                               </button>
                               <button
                                 type="button"
@@ -477,7 +500,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                                 }}
                               >
                                 <Trash2 className="h-3 w-3" />
-                                Retirer
+                                {t('access.activeAssignments.remove')}
                               </button>
                             </div>
                           </td>
@@ -493,31 +516,31 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
           <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
             <div className="card-body p-0">
               <div className="px-5 py-4">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Historique du module</h2>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('access.moduleHistory.title')}</h2>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Date / Heure</th>
-                      <th>Employee</th>
-                      <th>Identifiant</th>
-                      <th>Boitier</th>
-                      <th>Action</th>
+                      <th>{t('table.dateTime')}</th>
+                      <th>{t('table.employee')}</th>
+                      <th>{t('table.identifier')}</th>
+                      <th>{t('table.device')}</th>
+                      <th>{t('table.action')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {moduleHistory.length === 0 && (
                       <tr>
                         <td colSpan={5} className="text-center text-sm text-[var(--text-secondary)]">
-                          Aucun evenement trace.
+                          {t('access.moduleHistory.none')}
                         </td>
                       </tr>
                     )}
                     {moduleHistory.map((entry) => (
                       <tr key={entry.id}>
-                        <td>{formatDateTime(entry.occurredAt)}</td>
+                        <td>{formatDateTime(entry.occurredAt, locale === 'fr' ? 'fr-FR' : 'en-US')}</td>
                         <td>{entry.employee}</td>
                         <td className="font-mono text-[var(--accent-primary)]">{entry.identifier}</td>
                         <td>{entry.device}</td>
@@ -534,7 +557,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
       {selectedHistoryDevice ? (
         <DeviceHistoryDialog
-          moduleLabel={MODULE_LABELS[module]}
+          moduleLabel={t(MODULE_LABEL_KEYS[module])}
           deviceName={selectedHistoryDevice.name}
           deviceId={selectedHistoryDevice.id}
           systemIdentifier={selectedHistoryDevice.systemIdentifier}

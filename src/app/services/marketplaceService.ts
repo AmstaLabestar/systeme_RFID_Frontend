@@ -1,3 +1,4 @@
+import axios from 'axios';
 import type { DeviceConfigurationInput, ModuleKey, Product, PurchaseResult } from '@/app/types';
 import {
   MARKETPLACE_ROUTES,
@@ -28,6 +29,35 @@ interface MarketplaceSystemStock {
   code?: string;
   availableDevices?: number;
   availableExtensions?: number;
+}
+
+export type MarketplaceCheckoutErrorCode =
+  | 'OUT_OF_STOCK'
+  | 'CONFLICT'
+  | 'VALIDATION'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'NETWORK'
+  | 'SERVER'
+  | 'UNKNOWN';
+
+export class MarketplaceCheckoutError extends Error {
+  code: MarketplaceCheckoutErrorCode;
+  status?: number;
+  retryable: boolean;
+
+  constructor(params: {
+    code: MarketplaceCheckoutErrorCode;
+    message: string;
+    status?: number;
+    retryable?: boolean;
+  }) {
+    super(params.message);
+    this.name = 'MarketplaceCheckoutError';
+    this.code = params.code;
+    this.status = params.status;
+    this.retryable = params.retryable ?? false;
+  }
 }
 
 function createIdempotencyKey(productId: string, quantity: number): string {
@@ -66,6 +96,103 @@ function getStockMapFromSystems(catalog: Product[], rawSystems: unknown): Record
     accumulator[product.id] = typeof stock === 'number' ? stock : null;
     return accumulator;
   }, {});
+}
+
+function toCheckoutError(error: unknown): MarketplaceCheckoutError {
+  const fallbackMessage = 'Achat impossible.';
+
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const message = toApiErrorMessage(error, fallbackMessage);
+    const normalized = message.trim().toLowerCase();
+
+    if (error.code === 'ERR_NETWORK') {
+      return new MarketplaceCheckoutError({
+        code: 'NETWORK',
+        message:
+          'Connexion impossible au serveur. Verifiez votre reseau puis reessayez dans quelques instants.',
+        status,
+        retryable: true,
+      });
+    }
+
+    if (status === 401) {
+      return new MarketplaceCheckoutError({
+        code: 'UNAUTHORIZED',
+        message: 'Votre session a expire. Reconnectez-vous puis relancez la commande.',
+        status,
+      });
+    }
+
+    if (status === 403) {
+      return new MarketplaceCheckoutError({
+        code: 'FORBIDDEN',
+        message: 'Vous n avez pas les droits necessaires pour effectuer cet achat.',
+        status,
+      });
+    }
+
+    const stockSignals = ['stock', 'insuffisant', 'epuise', 'rupture'];
+    if (
+      stockSignals.some((signal) => normalized.includes(signal)) &&
+      (status === 400 || status === 409 || status === 422)
+    ) {
+      return new MarketplaceCheckoutError({
+        code: 'OUT_OF_STOCK',
+        message: 'Stock insuffisant pour cette quantite. Ajustez la quantite puis reessayez.',
+        status,
+      });
+    }
+
+    if (status === 409 || normalized.includes('conflit')) {
+      return new MarketplaceCheckoutError({
+        code: 'CONFLICT',
+        message:
+          'La commande est en conflit avec un achat simultane. Rafraichissez puis reessayez.',
+        status,
+        retryable: true,
+      });
+    }
+
+    if (status === 400 || status === 422) {
+      return new MarketplaceCheckoutError({
+        code: 'VALIDATION',
+        message,
+        status,
+      });
+    }
+
+    if (status && status >= 500) {
+      return new MarketplaceCheckoutError({
+        code: 'SERVER',
+        message: 'Le serveur a rencontre une erreur temporaire. Reessayez dans quelques instants.',
+        status,
+        retryable: true,
+      });
+    }
+
+    return new MarketplaceCheckoutError({
+      code: 'UNKNOWN',
+      message,
+      status,
+    });
+  }
+
+  if (error instanceof MarketplaceCheckoutError) {
+    return error;
+  }
+
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return new MarketplaceCheckoutError({
+      code: 'UNKNOWN',
+      message: error.message,
+    });
+  }
+
+  return new MarketplaceCheckoutError({
+    code: 'UNKNOWN',
+    message: fallbackMessage,
+  });
 }
 
 export const marketplaceService = {
@@ -119,7 +246,7 @@ export const marketplaceService = {
         marketplaceState: refreshedState,
       };
     } catch (error) {
-      throw new Error(toApiErrorMessage(error, 'Achat impossible.'));
+      throw toCheckoutError(error);
     }
   },
 
