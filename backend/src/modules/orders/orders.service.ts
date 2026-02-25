@@ -8,6 +8,7 @@ interface CreateOrderInput {
   systemId: string;
   targetType: OrderTargetType;
   quantity: number;
+  idempotencyKey?: string | null;
   unitPriceCents?: number | null;
   currency?: string | null;
 }
@@ -25,9 +26,44 @@ export class OrdersService {
         systemId: input.systemId,
         targetType: input.targetType,
         quantity: input.quantity,
+        idempotencyKey: input.idempotencyKey ?? null,
         unitPriceCents: input.unitPriceCents ?? null,
         currency: input.currency ?? null,
         status: OrderStatus.CREATED,
+      },
+    });
+  }
+
+  findByCustomerAndIdempotencyKey(
+    customerId: string,
+    idempotencyKey: string,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+    return client.order.findFirst({
+      where: {
+        customerId,
+        idempotencyKey,
+      },
+      include: {
+        system: true,
+        allocations: {
+          include: {
+            device: {
+              include: {
+                system: true,
+                identifiers: {
+                  orderBy: { createdAt: 'asc' },
+                },
+              },
+            },
+            identifier: {
+              include: {
+                system: true,
+              },
+            },
+          },
+        },
       },
     });
   }

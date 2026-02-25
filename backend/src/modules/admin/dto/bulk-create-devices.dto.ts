@@ -25,6 +25,11 @@ class DeviceStockItemDto {
   @MaxLength(120, { each: true })
   @Type(() => String)
   identifiers?: string[];
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{2,40}$/)
+  warehouseCode?: string;
 }
 
 export class BulkCreateDevicesDto {
@@ -39,11 +44,20 @@ export class BulkCreateDevicesDto {
   @Type(() => DeviceStockItemDto)
   devices!: DeviceStockItemDto[];
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{2,40}$/)
+  warehouseCode?: string;
+
   normalize() {
     this.devices = this.devices.map((device) => ({
       macAddress: sanitizeString(device.macAddress),
       identifiers: device.identifiers?.map((identifier) => sanitizeString(identifier)),
+      warehouseCode: device.warehouseCode
+        ? sanitizeString(device.warehouseCode)
+        : undefined,
     }));
+    this.warehouseCode = this.warehouseCode ? sanitizeString(this.warehouseCode) : undefined;
 
     return this;
   }

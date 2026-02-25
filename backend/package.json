@@ -9,9 +9,13 @@
     "dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "lint": "eslint \"src/**/*.ts\" \"prisma/**/*.ts\"",
+    "test:e2e": "jest --config ./jest-e2e.json --runInBand --forceExit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "cleanup:feedback-identifiers": "node -r ts-node/register prisma/cleanup-feedback-identifiers.ts",
+    "cleanup:feedback-identifiers:apply": "node -r ts-node/register prisma/cleanup-feedback-identifiers.ts --apply",
+    "cleanup:feedback-identifiers:force": "node -r ts-node/register prisma/cleanup-feedback-identifiers.ts --apply --force"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -45,12 +49,17 @@
     "@nestjs/testing": "^10.4.15",
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.1",
+    "@types/jest": "^30.0.0",
     "@types/ms": "^0.7.34",
     "@types/node": "^22.13.9",
     "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^6.0.3",
     "eslint": "^9.21.0",
     "eslint-config-prettier": "^10.0.1",
+    "jest": "^30.2.0",
     "prisma": "^6.6.0",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   },

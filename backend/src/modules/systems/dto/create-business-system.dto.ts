@@ -29,4 +29,21 @@ export class CreateBusinessSystemDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  deviceUnitPriceCents?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  extensionUnitPriceCents?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => sanitizeString(String(value)).toUpperCase())
+  @IsString()
+  @MinLength(3)
+  @MaxLength(3)
+  currency?: string;
 }

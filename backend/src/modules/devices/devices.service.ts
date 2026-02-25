@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { DeviceStatus } from '@prisma/client';
+import { DeviceStatus, OutboxEventType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { StockLedgerService } from '../inventory/stock-ledger.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { ConfigureDeviceDto } from './dto/configure-device.dto';
 
 const MAC_ADDRESS_REGEX = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
@@ -15,7 +17,11 @@ function normalizeMacAddress(value: string): string {
 
 @Injectable()
 export class DevicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stockLedgerService: StockLedgerService,
+    private readonly outboxService: OutboxService,
+  ) {}
 
   getMyDevices(ownerId: string) {
     return Promise.all([
@@ -71,24 +77,70 @@ export class DevicesService {
       );
     }
 
-    return this.prisma.device.update({
-      where: {
-        id: device.id,
-      },
-      data: {
-        configuredName: dto.name.trim(),
-        configuredLocation: dto.location.trim(),
-        isConfigured: true,
-      },
-      include: {
-        system: true,
-        identifiers: {
-          where: {
-            ownerId,
-          },
-          orderBy: { createdAt: 'asc' },
+    return this.prisma.$transaction(async (tx) => {
+      const updatedDevice = await tx.device.update({
+        where: {
+          id: device.id,
         },
-      },
+        data: {
+          configuredName: dto.name.trim(),
+          configuredLocation: dto.location.trim(),
+          isConfigured: true,
+        },
+        include: {
+          system: true,
+          identifiers: {
+            where: {
+              ownerId,
+            },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      await this.stockLedgerService.append(
+        [
+          {
+            resourceType: 'DEVICE',
+            resourceId: updatedDevice.id,
+            systemId: updatedDevice.systemId,
+            deviceId: updatedDevice.id,
+            action: 'CONFIGURED',
+            warehouseCode: updatedDevice.warehouseCode,
+            ownerId,
+            fromStatus: DeviceStatus.ASSIGNED,
+            toStatus: DeviceStatus.ASSIGNED,
+            details: {
+              name: updatedDevice.configuredName,
+              location: updatedDevice.configuredLocation,
+              configuredAt: new Date().toISOString(),
+            } as Prisma.InputJsonValue,
+          },
+        ],
+        tx,
+      );
+
+      await this.outboxService.enqueue(
+        {
+          eventType: OutboxEventType.DEVICE_ACTIVATED,
+          aggregateType: 'DEVICE',
+          aggregateId: updatedDevice.id,
+          tenantId: updatedDevice.ownerTenantId,
+          systemId: updatedDevice.systemId,
+          deviceId: updatedDevice.id,
+          payload: {
+            deviceId: updatedDevice.id,
+            ownerId,
+            systemCode: updatedDevice.system.code,
+            configuredName: updatedDevice.configuredName,
+            configuredLocation: updatedDevice.configuredLocation,
+            macAddress: updatedDevice.macAddress,
+          },
+        },
+        tx,
+      );
+
+      return updatedDevice;
     });
   }
 }

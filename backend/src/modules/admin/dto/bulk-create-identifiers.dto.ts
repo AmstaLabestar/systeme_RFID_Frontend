@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { IdentifierType } from '@prisma/client';
@@ -22,8 +23,14 @@ export class BulkCreateIdentifiersDto {
   @Type(() => String)
   physicalIdentifiers!: string[];
 
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{2,40}$/)
+  warehouseCode?: string;
+
   normalize() {
     this.physicalIdentifiers = this.physicalIdentifiers.map((value) => sanitizeString(value));
+    this.warehouseCode = this.warehouseCode ? sanitizeString(this.warehouseCode) : undefined;
     return this;
   }
 }
