@@ -8,7 +8,10 @@
     "dev": "vite",
     "dev:backend": "npm --prefix backend run start:dev",
     "backend:prisma:generate": "npm --prefix backend run prisma:generate",
-    "backend:prisma:migrate": "npm --prefix backend run prisma:migrate"
+    "backend:prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "backend:cleanup:feedback-identifiers": "npm --prefix backend run cleanup:feedback-identifiers",
+    "backend:cleanup:feedback-identifiers:apply": "npm --prefix backend run cleanup:feedback-identifiers:apply",
+    "backend:cleanup:feedback-identifiers:force": "npm --prefix backend run cleanup:feedback-identifiers:force"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -68,7 +71,8 @@
     "sonner": "2.0.3",
     "tailwind-merge": "3.2.0",
     "tw-animate-css": "1.3.8",
-    "vaul": "1.1.2"
+    "vaul": "1.1.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",

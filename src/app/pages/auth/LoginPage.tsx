@@ -198,7 +198,7 @@ export function LoginPage() {
       subtitle={
         twoFactorChallenge
           ? 'Verification 2FA requise: entrez le code TOTP a 6 chiffres de votre application Authenticator.'
-          : 'Accedez a la console de gestion des boitiers IoT et services digitaux.'
+          : 'Accedez au dashboard et gerer vos service !'
       }
       footerText="Pas encore de compte ?"
       footerLinkLabel="Creer un compte"
@@ -246,7 +246,7 @@ export function LoginPage() {
             <input
               type="text"
               className={fieldInputClassName}
-              placeholder="email@exemple.com ou +2250700000000"
+              placeholder="email@exemple.com ou +22670000000"
               {...register('identifier', { required: 'Identifiant requis' })}
             />
             <span className={fieldErrorClassName}>{errors.identifier?.message ?? ''}</span>

@@ -504,17 +504,6 @@ export function toProductList(value: unknown): Product[] {
     ? value
     : asArray(pickFirstDefined(source.items, source.products, source.catalog, source.data));
   const products: Product[] = [];
-  const defaultDevicePriceByModule: Record<ModuleKey, number> = {
-    'rfid-presence': 21000,
-    'rfid-porte': 20000,
-    biometrie: 20000,
-    feedback: 15000,
-  };
-  const defaultExtensionPriceByModule: Record<Exclude<ModuleKey, 'feedback'>, number> = {
-    'rfid-presence': 1000,
-    'rfid-porte': 1000,
-    biometrie: 1000,
-  };
 
   list.forEach((entry) => {
     const item = asRecord(entry);
@@ -549,6 +538,14 @@ export function toProductList(value: unknown): Product[] {
         pickFirstDefined(item.availableExtensions, item.available_extensions),
         0,
       );
+      const deviceUnitPriceCents = asNumber(
+        pickFirstDefined(item.deviceUnitPriceCents, item.device_unit_price_cents),
+        0,
+      );
+      const extensionUnitPriceCents = asNumber(
+        pickFirstDefined(item.extensionUnitPriceCents, item.extension_unit_price_cents),
+        0,
+      );
 
       products.push({
         id: `device-${module}`,
@@ -558,7 +555,7 @@ export function toProductList(value: unknown): Product[] {
         identifierType: identifierType || undefined,
         label: `Boitier ${systemName}`,
         description: `Boitier physique ${systemName} provisionne en stock reel.`,
-        unitPrice: defaultDevicePriceByModule[module],
+        unitPrice: Math.max(deviceUnitPriceCents, 0),
         stockLimit: Math.max(availableDevices, 0),
         includedIdentifiers: Math.max(identifiersPerDevice, 0),
       });
@@ -572,7 +569,7 @@ export function toProductList(value: unknown): Product[] {
           identifierType: identifierType || undefined,
           label: `Extensions ${systemName}`,
           description: `Extensions physiques ${systemName} deja en stock reel.`,
-          unitPrice: defaultExtensionPriceByModule[module],
+          unitPrice: Math.max(extensionUnitPriceCents, 0),
           stockLimit: Math.max(availableExtensions, 0),
           quantityPerPack: 1,
         });
@@ -891,15 +888,12 @@ export function toGoogleVerifyPayload(idToken: string): UnknownRecord {
 
 export function toPurchasePayload(payload: { productId: string; quantity: number }): UnknownRecord {
   const normalizedProductId = payload.productId.trim().toLowerCase();
-  const moduleByLegacyProductId: Record<string, ModuleKey> = {
-    'device-rfid-presence': 'rfid-presence',
-    'device-rfid-porte': 'rfid-porte',
-    'device-biometrie': 'biometrie',
-    'device-feedback': 'feedback',
-    'pack-badge-rfid': 'rfid-presence',
-    'pack-serrure-rfid': 'rfid-porte',
-    'pack-empreinte': 'biometrie',
-  };
+
+  if (normalizedProductId.startsWith('pack-')) {
+    throw new Error(
+      'Produit legacy deprecie. Utilisez les SKUs marketplace allocation-only (device-* ou identifier-extension-*).',
+    );
+  }
 
   const extractedDeviceModule = normalizedProductId.startsWith('device-')
     ? toModuleKey(normalizedProductId.replace('device-', ''))
@@ -907,12 +901,13 @@ export function toPurchasePayload(payload: { productId: string; quantity: number
   const extractedExtensionModule = normalizedProductId.startsWith('identifier-extension-')
     ? toModuleKey(normalizedProductId.replace('identifier-extension-', ''))
     : null;
-  const fallbackModule = moduleByLegacyProductId[normalizedProductId] ?? null;
-  const module = extractedDeviceModule ?? extractedExtensionModule ?? fallbackModule;
+  const module = extractedDeviceModule ?? extractedExtensionModule;
   const targetType =
-    extractedExtensionModule || normalizedProductId.startsWith('pack-')
-      ? 'IDENTIFIER_EXTENSION'
-      : 'DEVICE';
+    extractedExtensionModule ? 'IDENTIFIER_EXTENSION' : 'DEVICE';
+
+  if (extractedExtensionModule === 'feedback') {
+    throw new Error('Le systeme FEEDBACK ne supporte pas les extensions.');
+  }
 
   const systemCodeByModule: Record<ModuleKey, string> = {
     'rfid-presence': 'RFID_PRESENCE',

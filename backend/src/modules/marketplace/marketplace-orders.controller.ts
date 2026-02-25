@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
@@ -17,7 +17,11 @@ export class MarketplaceOrdersController {
   }
 
   @Post('orders')
-  createOrder(@CurrentUser() user: AccessTokenPayload, @Body() dto: CreateMarketplaceOrderDto) {
-    return this.marketplaceOrdersService.createOrder(user.userId, dto);
+  createOrder(
+    @CurrentUser() user: AccessTokenPayload,
+    @Body() dto: CreateMarketplaceOrderDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.marketplaceOrdersService.createOrder(user.userId, dto, idempotencyKey);
   }
 }

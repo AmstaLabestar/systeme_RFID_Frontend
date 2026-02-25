@@ -9,6 +9,7 @@ interface CreateIdentifiersInput {
   physicalIdentifiers: string[];
   deviceId?: string | null;
   createdById?: string;
+  warehouseCode?: string;
 }
 
 @Injectable()
@@ -47,6 +48,7 @@ export class IdentifiersService {
         physicalIdentifier,
         status: IdentifierStatus.IN_STOCK,
         deviceId: payload.deviceId ?? null,
+        warehouseCode: payload.warehouseCode ?? 'MAIN',
         createdById: payload.createdById,
       })),
     });

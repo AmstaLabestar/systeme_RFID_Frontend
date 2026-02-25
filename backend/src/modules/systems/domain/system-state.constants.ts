@@ -1,6 +1,4 @@
 import type {
-  Employee,
-  HistoryEvent,
   IdentifierType,
   MarketplaceProduct,
   MarketplaceStatePayload,
@@ -149,56 +147,6 @@ export const MARKETPLACE_CATALOG: MarketplaceProduct[] = [
 
 export const CATALOG_BY_ID = new Map(MARKETPLACE_CATALOG.map((product) => [product.id, product]));
 
-function cloneJson<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function createSeedEmployees(): Employee[] {
-  return [
-    { id: 'emp-1', firstName: 'Aminata', lastName: 'Diarra', fullName: 'Aminata Diarra' },
-    { id: 'emp-2', firstName: 'Ibrahim', lastName: 'Diallo', fullName: 'Ibrahim Diallo' },
-    { id: 'emp-3', firstName: 'Moussa', lastName: 'Sana', fullName: 'Moussa Sana' },
-    { id: 'emp-4', firstName: 'Fati', lastName: 'Bikienga', fullName: 'Fati Bikienga' },
-  ];
-}
-
-function createSeedHistory(): HistoryEvent[] {
-  const now = Date.now();
-
-  return [
-    {
-      id: 'hist-seed-1',
-      module: 'rfid-presence',
-      deviceId: 'seed-device-rfid-presence-1',
-      employee: 'Aminata Diarra',
-      identifier: 'BAD-1001',
-      device: 'Boitier Presence #1',
-      action: 'Entree employee',
-      occurredAt: new Date(now - 1000 * 60 * 30).toISOString(),
-    },
-    {
-      id: 'hist-seed-2',
-      module: 'rfid-porte',
-      deviceId: 'seed-device-rfid-porte-1',
-      employee: 'Ibrahim Diallo',
-      identifier: 'SER-2001',
-      device: 'Boitier Porte #1',
-      action: 'Ouverture porte principale',
-      occurredAt: new Date(now - 1000 * 60 * 80).toISOString(),
-    },
-    {
-      id: 'hist-seed-3',
-      module: 'biometrie',
-      deviceId: 'seed-device-biometrie-1',
-      employee: 'Moussa Sana',
-      identifier: 'EMP-3001',
-      device: 'Boitier Biometrie #1',
-      action: 'Verification biometrie reussie',
-      occurredAt: new Date(now - 1000 * 60 * 140).toISOString(),
-    },
-  ];
-}
-
 export function createDefaultMarketplaceState(): MarketplaceStatePayload {
   const productStockById = MARKETPLACE_CATALOG.reduce<Record<string, number | null>>(
     (accumulator, product) => {
@@ -217,9 +165,9 @@ export function createDefaultMarketplaceState(): MarketplaceStatePayload {
 
 export function createDefaultServicesState(): ServicesStatePayload {
   return {
-    employees: cloneJson(createSeedEmployees()),
+    employees: [],
     assignments: [],
-    history: cloneJson(createSeedHistory()),
+    history: [],
     feedbackRecords: [],
   };
 }

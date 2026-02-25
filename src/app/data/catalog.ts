@@ -27,7 +27,7 @@ export const BASE_NAV_ITEMS: DashboardNavItem[] = [
     page: 'admin-stock',
     label: 'Admin Stock',
     path: '/dashboard/admin-stock',
-    roles: ['owner', 'admin'],
+    roles: ['admin'],
   },
   {
     page: 'rfid-presence',

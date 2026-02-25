@@ -56,15 +56,45 @@ enum AllocationStatus {
   FAILED
 }
 
+enum StockResourceType {
+  DEVICE
+  IDENTIFIER
+}
+
+enum StockMovementAction {
+  STOCK_CREATED
+  EXTENSION_STOCK_CREATED
+  RESERVED
+  ASSIGNED
+  RELEASED
+  CONFIGURED
+}
+
+enum OutboxEventType {
+  ORDER_ALLOCATED
+  STOCK_LOW
+  DEVICE_ACTIVATED
+  RESERVATION_RELEASED
+}
+
+enum OutboxEventStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+}
+
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  domain    String   @unique
-  users     User[]
-  roles     Role[]
-  orders    Order[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String            @id @default(uuid())
+  name             String
+  domain           String            @unique
+  users            User[]
+  roles            Role[]
+  orders           Order[]
+  outboxEvents     OutboxEvent[]
+  webhookEndpoints WebhookEndpoint[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([domain])
   @@map("tenants")
@@ -192,10 +222,16 @@ model BusinessSystem {
   hasIdentifiers       Boolean           @default(false)
   identifiersPerDevice Int               @default(0)
   identifierType       IdentifierType?
+  deviceUnitPriceCents Int               @default(0)
+  extensionUnitPriceCents Int            @default(0)
+  currency             String            @default("XOF") @db.VarChar(3)
+  lowStockThreshold    Int               @default(5)
   isActive             Boolean           @default(true)
   devices              Device[]
   identifiers          Identifier[]
   orders               Order[]
+  stockMovements       StockMovement[]
+  outboxEvents         OutboxEvent[]
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
@@ -204,85 +240,107 @@ model BusinessSystem {
 }
 
 model Device {
-  id               String       @id @default(uuid())
-  systemId         String
-  system           BusinessSystem @relation(fields: [systemId], references: [id], onDelete: Restrict)
-  macAddress       String       @unique
-  status           DeviceStatus @default(IN_STOCK)
-  ownerId          String?
-  owner            User?        @relation("user_devices", fields: [ownerId], references: [id], onDelete: SetNull)
-  ownerTenantId    String?
-  createdById      String?
-  createdBy        User?        @relation("admin_created_devices", fields: [createdById], references: [id], onDelete: SetNull)
-  identifiers      Identifier[]
-  allocations      Allocation[]
-  configuredName   String?
-  configuredLocation String?
-  isConfigured     Boolean      @default(false)
-  qrCodeToken      String?      @unique
-  qrCodeDataUrl    String?
-  assignedAt       DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id                  String          @id @default(uuid())
+  systemId            String
+  system              BusinessSystem  @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  macAddress          String          @unique
+  status              DeviceStatus    @default(IN_STOCK)
+  ownerId             String?
+  owner               User?           @relation("user_devices", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerTenantId       String?
+  createdById         String?
+  createdBy           User?           @relation("admin_created_devices", fields: [createdById], references: [id], onDelete: SetNull)
+  warehouseCode       String          @default("MAIN")
+  reservedAt          DateTime?
+  reservationExpiresAt DateTime?
+  identifiers         Identifier[]
+  allocations         Allocation[]
+  stockMovements      StockMovement[]
+  outboxEvents        OutboxEvent[]
+  configuredName      String?
+  configuredLocation  String?
+  isConfigured        Boolean         @default(false)
+  qrCodeToken         String?         @unique
+  qrCodeDataUrl       String?
+  assignedAt          DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   @@index([systemId])
   @@index([status])
   @@index([ownerId])
   @@index([ownerTenantId])
+  @@index([warehouseCode])
+  @@index([reservationExpiresAt])
+  @@index([status, reservationExpiresAt])
   @@index([systemId, status])
+  @@index([systemId, warehouseCode, status])
   @@map("devices")
 }
 
 model Identifier {
-  id                 String           @id @default(uuid())
-  systemId           String
-  system             BusinessSystem   @relation(fields: [systemId], references: [id], onDelete: Restrict)
-  deviceId           String?
-  device             Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  ownerId            String?
-  owner              User?            @relation("user_identifiers", fields: [ownerId], references: [id], onDelete: SetNull)
-  ownerTenantId      String?
-  createdById        String?
-  createdBy          User?            @relation("admin_created_identifiers", fields: [createdById], references: [id], onDelete: SetNull)
-  type               IdentifierType
-  physicalIdentifier String           @unique
-  status             IdentifierStatus @default(IN_STOCK)
-  allocations        Allocation[]
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  id                  String           @id @default(uuid())
+  systemId            String
+  system              BusinessSystem   @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  deviceId            String?
+  device              Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ownerId             String?
+  owner               User?            @relation("user_identifiers", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerTenantId       String?
+  createdById         String?
+  createdBy           User?            @relation("admin_created_identifiers", fields: [createdById], references: [id], onDelete: SetNull)
+  warehouseCode       String           @default("MAIN")
+  reservedAt          DateTime?
+  reservationExpiresAt DateTime?
+  type                IdentifierType
+  physicalIdentifier  String           @unique
+  status              IdentifierStatus @default(IN_STOCK)
+  allocations         Allocation[]
+  stockMovements      StockMovement[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@index([systemId])
   @@index([status])
   @@index([ownerId])
   @@index([ownerTenantId])
   @@index([deviceId])
+  @@index([warehouseCode])
+  @@index([reservationExpiresAt])
+  @@index([status, reservationExpiresAt])
   @@index([systemId, status])
+  @@index([systemId, warehouseCode, status])
   @@index([physicalIdentifier])
   @@map("identifiers")
 }
 
 model Order {
-  id             String          @id @default(uuid())
-  customerId     String
-  customer       User            @relation("user_orders", fields: [customerId], references: [id], onDelete: Restrict)
-  tenantId       String
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  systemId       String
-  system         BusinessSystem  @relation(fields: [systemId], references: [id], onDelete: Restrict)
-  targetType     OrderTargetType
-  quantity       Int
-  unitPriceCents Int?
-  currency       String?
-  status         OrderStatus     @default(CREATED)
-  failureReason  String?
-  allocations    Allocation[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id              String          @id @default(uuid())
+  customerId      String
+  customer        User            @relation("user_orders", fields: [customerId], references: [id], onDelete: Restrict)
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  systemId        String
+  system          BusinessSystem  @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  targetType      OrderTargetType
+  quantity        Int
+  unitPriceCents  Int?
+  currency        String?
+  idempotencyKey  String?
+  status          OrderStatus     @default(CREATED)
+  failureReason   String?
+  allocations     Allocation[]
+  stockMovements  StockMovement[]
+  outboxEvents    OutboxEvent[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@index([customerId])
   @@index([tenantId])
   @@index([systemId])
   @@index([status])
+  @@index([idempotencyKey])
+  @@unique([customerId, idempotencyKey])
   @@map("orders")
 }
 
@@ -307,6 +365,91 @@ model Allocation {
   @@index([identifierId])
   @@index([status])
   @@map("allocations")
+}
+
+model StockMovement {
+  id           String            @id @default(uuid())
+  resourceType StockResourceType
+  resourceId   String
+  systemId     String
+  system       BusinessSystem    @relation(fields: [systemId], references: [id], onDelete: Restrict)
+  deviceId     String?
+  device       Device?           @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  identifierId String?
+  identifier   Identifier?       @relation(fields: [identifierId], references: [id], onDelete: SetNull)
+  orderId      String?
+  order        Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  action       StockMovementAction
+  quantity     Int               @default(1)
+  warehouseCode String?
+  actorId      String?
+  ownerId      String?
+  fromStatus   String?
+  toStatus     String?
+  details      Json?
+  createdAt    DateTime          @default(now())
+
+  @@index([resourceType, resourceId])
+  @@index([systemId, action])
+  @@index([deviceId])
+  @@index([identifierId])
+  @@index([orderId])
+  @@index([actorId])
+  @@index([ownerId])
+  @@index([warehouseCode])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+model OutboxEvent {
+  id           String           @id @default(uuid())
+  eventType    OutboxEventType
+  status       OutboxEventStatus @default(PENDING)
+  aggregateType String
+  aggregateId  String
+  tenantId     String?
+  tenant       Tenant?          @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  systemId     String?
+  system       BusinessSystem?  @relation(fields: [systemId], references: [id], onDelete: SetNull)
+  orderId      String?
+  order        Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  deviceId     String?
+  device       Device?          @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  payload      Json
+  attempts     Int              @default(0)
+  availableAt  DateTime         @default(now())
+  deliveredAt  DateTime?
+  lastError    String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([eventType, status])
+  @@index([status, availableAt])
+  @@index([aggregateType, aggregateId])
+  @@index([tenantId])
+  @@index([systemId])
+  @@index([orderId])
+  @@index([deviceId])
+  @@map("outbox_events")
+}
+
+model WebhookEndpoint {
+  id              String   @id @default(uuid())
+  name            String
+  url             String
+  secret          String?
+  events          Json
+  isActive        Boolean  @default(true)
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  failureCount    Int      @default(0)
+  lastDeliveredAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([tenantId])
+  @@map("webhook_endpoints")
 }
 
 model AdminActionLog {
