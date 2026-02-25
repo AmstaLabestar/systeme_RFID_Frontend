@@ -20,17 +20,19 @@ export function delay(ms = 250): Promise<void> {
   });
 }
 
-export function formatDateTime(isoDate: string): string {
-  return new Intl.DateTimeFormat('fr-FR', {
+export function formatDateTime(isoDate: string, locale = 'fr-FR'): string {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(isoDate));
 }
 
-export function formatCurrencyFcfa(value: number): string {
-  return new Intl.NumberFormat('fr-FR', {
+export function formatCurrencyMinor(valueMinor: number, currency = 'XOF'): string {
+  const formatter = new Intl.NumberFormat('fr-FR', {
     style: 'currency',
-    currency: 'XOF',
-    maximumFractionDigits: 0,
-  }).format(value);
+    currency,
+  });
+  const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
+  const divisor = 10 ** fractionDigits;
+  return formatter.format(valueMinor / divisor);
 }

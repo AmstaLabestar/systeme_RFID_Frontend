@@ -31,7 +31,8 @@ export interface Product {
   identifierType?: IdentifierType;
   label: string;
   description: string;
-  unitPrice: number;
+  unitPriceMinor: number;
+  currency: string;
   stockLimit?: number;
   includedIdentifiers?: number;
   quantityPerPack?: number;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { useAuth } from '@/app/contexts';
+import { useAuth, useI18n } from '@/app/contexts';
 import { isGoogleOAuthConfigured } from '@/app/services';
 import { AuthShell } from './AuthShell';
 
@@ -41,6 +41,7 @@ function GoogleLogoIcon() {
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { isAuthenticated, signUp, startGoogleOAuth } = useAuth();
   const isGoogleOAuthAvailable = isGoogleOAuthConfigured();
   const fieldWrapperClassName = 'flex w-full flex-col gap-1.5';
@@ -72,10 +73,10 @@ export function RegisterPage() {
         password: values.password,
         phoneNumber: values.phoneNumber,
       });
-      toast.success('Compte cree, bienvenue.');
+      toast.success(t('register.success'));
       navigate('/dashboard/overview', { replace: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de creer ce compte.';
+      const message = error instanceof Error ? error.message : t('register.error');
       toast.error(message);
     }
   };
@@ -85,7 +86,7 @@ export function RegisterPage() {
       setIsGoogleRedirecting(true);
       startGoogleOAuth('/dashboard/overview');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Impossible de se connecter.';
+      const message = error instanceof Error ? error.message : t('register.connectError');
       toast.error(message);
       setIsGoogleRedirecting(false);
     }
@@ -93,62 +94,62 @@ export function RegisterPage() {
 
   return (
     <AuthShell
-      title="Inscription"
-      subtitle="Creez votre espace pour gerer vos service."
-      footerText="Vous avez deja un compte ?"
-      footerLinkLabel="Se connecter"
+      title={t('register.title')}
+      subtitle={t('register.subtitle')}
+      footerText={t('register.footerText')}
+      footerLinkLabel={t('register.footerLink')}
       footerLinkTo="/auth/login"
     >
       <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
         <div className="grid gap-4 md:grid-cols-2">
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Prenom</span>
+            <span className={fieldLabelClassName}>{t('register.firstName')}</span>
             <input
               className={fieldInputClassName}
-              {...register('firstName', { required: 'Prenom requis' })}
+              {...register('firstName', { required: t('register.firstNameRequired') })}
             />
             <span className={fieldErrorClassName}>{errors.firstName?.message ?? ''}</span>
           </label>
 
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Nom</span>
+            <span className={fieldLabelClassName}>{t('register.lastName')}</span>
             <input
               className={fieldInputClassName}
-              {...register('lastName', { required: 'Nom requis' })}
+              {...register('lastName', { required: t('register.lastNameRequired') })}
             />
             <span className={fieldErrorClassName}>{errors.lastName?.message ?? ''}</span>
           </label>
         </div>
 
         <label className={fieldWrapperClassName}>
-          <span className={fieldLabelClassName}>Entreprise</span>
+          <span className={fieldLabelClassName}>{t('register.company')}</span>
           <input
             className={fieldInputClassName}
-            {...register('company', { required: 'Entreprise requise' })}
+            {...register('company', { required: t('register.companyRequired') })}
           />
           <span className={fieldErrorClassName}>{errors.company?.message ?? ''}</span>
         </label>
 
         <label className={fieldWrapperClassName}>
-          <span className={fieldLabelClassName}>Email</span>
+          <span className={fieldLabelClassName}>{t('register.email')}</span>
           <input
             type="email"
             className={fieldInputClassName}
-            {...register('email', { required: 'Email requis' })}
+            {...register('email', { required: t('register.emailRequired') })}
           />
           <span className={fieldErrorClassName}>{errors.email?.message ?? ''}</span>
         </label>
 
         <label className={fieldWrapperClassName}>
-          <span className={fieldLabelClassName}>Numero de telephone (optionnel)</span>
+          <span className={fieldLabelClassName}>{t('register.phone')}</span>
           <input
             type="tel"
             className={fieldInputClassName}
-            placeholder="+22670000000"
+            placeholder={t('register.phonePlaceholder')}
             {...register('phoneNumber', {
               pattern: {
                 value: /^\+?[1-9]\d{7,11}$/,
-                message: 'Format international invalide',
+                message: t('register.phoneInvalid'),
               },
             })}
           />
@@ -157,15 +158,15 @@ export function RegisterPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Mot de passe</span>
+            <span className={fieldLabelClassName}>{t('register.password')}</span>
             <input
               type="password"
               className={fieldInputClassName}
               {...register('password', {
-                required: 'Mot de passe requis',
+                required: t('register.passwordRequired'),
                 minLength: {
                   value: 8,
-                  message: '8 caracteres minimum',
+                  message: t('register.passwordMin'),
                 },
               })}
             />
@@ -173,13 +174,13 @@ export function RegisterPage() {
           </label>
 
           <label className={fieldWrapperClassName}>
-            <span className={fieldLabelClassName}>Confirmer</span>
+            <span className={fieldLabelClassName}>{t('register.confirmPassword')}</span>
             <input
               type="password"
               className={fieldInputClassName}
               {...register('confirmPassword', {
-                required: 'Confirmation requise',
-                validate: (value) => value === passwordValue || 'Mots de passe differents',
+                required: t('register.confirmPasswordRequired'),
+                validate: (value) => value === passwordValue || t('register.confirmPasswordMismatch'),
               })}
             />
             <span className={fieldErrorClassName}>{errors.confirmPassword?.message ?? ''}</span>
@@ -191,12 +192,14 @@ export function RegisterPage() {
           className="btn btn-info mt-2 w-full text-[var(--app-bg)]"
           disabled={isSubmitting || isGoogleRedirecting}
         >
-          {isSubmitting ? 'Creation...' : 'Creer mon compte'}
+          {isSubmitting ? t('register.submitting') : t('register.submit')}
         </button>
 
         <div className="flex items-center gap-3">
           <span className="h-px flex-1 bg-[var(--border-soft)]" />
-          <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">ou</span>
+          <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
+            {t('register.or')}
+          </span>
           <span className="h-px flex-1 bg-[var(--border-soft)]" />
         </div>
 
@@ -209,7 +212,7 @@ export function RegisterPage() {
               onClick={onGoogleSignIn}
             >
               <GoogleLogoIcon />
-              {isGoogleRedirecting ? 'Redirection Google...' : 'Continuer avec Google'}
+              {isGoogleRedirecting ? t('register.googleRedirecting') : t('register.googleContinue')}
             </button>
           ) : null}
         </div>

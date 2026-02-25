@@ -15,8 +15,7 @@ import {
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { MODULE_LABELS } from '@/app/data';
-import { useMarketplace, useServices } from '@/app/contexts';
+import { useI18n, useMarketplace, useServices } from '@/app/contexts';
 import { downloadDeviceHistoryPdf, formatDateTime } from '@/app/services';
 import type { FeedbackRecord, FeedbackSentiment } from '@/app/types';
 import {
@@ -29,32 +28,39 @@ import {
 
 const chartPalette = ['#00BFFF', '#00E676', '#FF9100', '#8E44AD'];
 
-function getFeedbackButtonLabel(sentiment: FeedbackSentiment): string {
+function getFeedbackButtonLabel(
+  sentiment: FeedbackSentiment,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
   if (sentiment === 'positive') {
-    return 'Positif';
+    return t('feedback.sentiment.positive');
   }
 
   if (sentiment === 'neutral') {
-    return 'Neutre';
+    return t('feedback.sentiment.neutral');
   }
 
-  return 'Negatif';
+  return t('feedback.sentiment.negative');
 }
 
-function mapFeedbackRecordToHistoryEntry(record: FeedbackRecord): DeviceHistoryDialogEntry {
-  const buttonLabel = getFeedbackButtonLabel(record.sentiment);
+function mapFeedbackRecordToHistoryEntry(
+  record: FeedbackRecord,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): DeviceHistoryDialogEntry {
+  const buttonLabel = getFeedbackButtonLabel(record.sentiment, t);
 
   return {
     id: record.id,
     occurredAt: record.createdAt,
-    actor: 'Visiteur',
+    actor: t('feedback.history.actorVisitor'),
     identifier: buttonLabel,
-    action: `Appui bouton ${buttonLabel.toLowerCase()}`,
+    action: t('feedback.history.actionPressed', { label: buttonLabel }),
   };
 }
 
 export function FeedbackPage() {
   const navigate = useNavigate();
+  const { locale, t } = useI18n();
   const [periodDays, setPeriodDays] = useState<7 | 30 | 90>(30);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [historyDeviceId, setHistoryDeviceId] = useState<string | null>(null);
@@ -93,16 +99,14 @@ export function FeedbackPage() {
         ? new Date(Date.now() - options.periodDays * 24 * 60 * 60 * 1000)
         : null;
 
-      return (
-      feedbackRecords
+      return feedbackRecords
         .filter((record) => record.deviceId === deviceId)
         .filter((record) => (minDate ? new Date(record.createdAt) >= minDate : true))
         .slice()
         .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-        .map(mapFeedbackRecordToHistoryEntry)
-      );
+        .map((record) => mapFeedbackRecordToHistoryEntry(record, t));
     },
-    [feedbackRecords],
+    [feedbackRecords, t],
   );
 
   const historyEntriesByDevice = useMemo(() => {
@@ -159,10 +163,11 @@ export function FeedbackPage() {
 
   const barSeries = useMemo(() => {
     const buckets = new Map<string, { day: string; positive: number; neutral: number; negative: number }>();
+    const timeLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
 
     filteredRecords.forEach((record) => {
       const date = new Date(record.createdAt);
-      const day = new Intl.DateTimeFormat('fr-FR', { month: '2-digit', day: '2-digit' }).format(date);
+      const day = new Intl.DateTimeFormat(timeLocale, { month: '2-digit', day: '2-digit' }).format(date);
 
       if (!buckets.has(day)) {
         buckets.set(day, { day, positive: 0, neutral: 0, negative: 0 });
@@ -181,13 +186,16 @@ export function FeedbackPage() {
     });
 
     return Array.from(buckets.values()).slice(-15);
-  }, [filteredRecords]);
+  }, [filteredRecords, locale]);
 
-  const pieData = [
-    { name: 'Positif', value: summary.positive, color: chartPalette[1] },
-    { name: 'Neutre', value: summary.neutral, color: chartPalette[2] },
-    { name: 'Negatif', value: summary.negative, color: '#FF5252' },
-  ];
+  const pieData = useMemo(
+    () => [
+      { name: t('feedback.sentiment.positive'), value: summary.positive, color: chartPalette[1] },
+      { name: t('feedback.sentiment.neutral'), value: summary.neutral, color: chartPalette[2] },
+      { name: t('feedback.sentiment.negative'), value: summary.negative, color: '#FF5252' },
+    ],
+    [summary.positive, summary.neutral, summary.negative, t],
+  );
 
   const handleConfigureDevice = async (
     deviceId: string,
@@ -197,7 +205,7 @@ export function FeedbackPage() {
       await configureDevice(deviceId, values);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Activation impossible.';
+      const message = error instanceof Error ? error.message : t('feedback.errors.activationImpossible');
       toast.error(message);
       return false;
     }
@@ -210,7 +218,7 @@ export function FeedbackPage() {
     const device = configuredDevices.find((candidate) => candidate.id === deviceId);
 
     if (!device) {
-      toast.error('Boitier introuvable.');
+      toast.error(t('feedback.errors.deviceNotFound'));
       return;
     }
 
@@ -222,7 +230,7 @@ export function FeedbackPage() {
     }));
 
     downloadDeviceHistoryPdf({
-      moduleLabel: MODULE_LABELS.feedback,
+      moduleLabel: t('module.feedback'),
       deviceName: device.name,
       deviceId: device.id,
       systemIdentifier: device.systemIdentifier,
@@ -237,14 +245,14 @@ export function FeedbackPage() {
 
   const handleDownloadSelectedPeriodPdf = () => {
     if (!selectedDeviceId) {
-      toast.error('Selectionnez un boitier.');
+      toast.error(t('feedback.errors.selectDevice'));
       return;
     }
 
     const device = configuredDevices.find((candidate) => candidate.id === selectedDeviceId);
 
     if (!device) {
-      toast.error('Boitier introuvable.');
+      toast.error(t('feedback.errors.deviceNotFound'));
       return;
     }
 
@@ -256,7 +264,7 @@ export function FeedbackPage() {
     }));
 
     downloadDeviceHistoryPdf({
-      moduleLabel: `${MODULE_LABELS.feedback} (${periodDays} jours)`,
+      moduleLabel: t('feedback.pdf.moduleLabelDays', { module: t('module.feedback'), days: periodDays }),
       deviceName: device.name,
       deviceId: device.id,
       systemIdentifier: device.systemIdentifier,
@@ -268,16 +276,17 @@ export function FeedbackPage() {
   if (moduleDevices.length === 0) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          title="Feedback"
-          description="Module statistique uniquement: boitiers a 3 boutons (negatif, neutre, positif)."
-        />
+        <PageHeader title={t('feedback.title')} description={t('feedback.empty.noDevice.descriptionHeader')} />
         <EmptyState
-          title="Aucun boitier Feedback"
-          description="Achetez votre boitier dans le Marketplace pour lancer la collecte des retours."
+          title={t('feedback.empty.noDevice.title')}
+          description={t('feedback.empty.noDevice.description')}
           action={
-            <button type="button" className="btn btn-info text-[var(--app-bg)]" onClick={() => navigate('/dashboard/marketplace')}>
-              Aller au Marketplace
+            <button
+              type="button"
+              className="btn btn-info text-[var(--app-bg)]"
+              onClick={() => navigate('/dashboard/marketplace')}
+            >
+              {t('feedback.empty.noDevice.action')}
             </button>
           }
         />
@@ -287,14 +296,13 @@ export function FeedbackPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Feedback"
-        description="Statistiques des boutons Negatif / Neutre / Positif. Aucun CRUD sur ce module."
-      />
+      <PageHeader title={t('feedback.title')} description={t('feedback.description')} />
 
       {pendingDevices.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--warning-main)]">Activation des boitiers</h2>
+          <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--warning-main)]">
+            {t('feedback.pendingActivation.title')}
+          </h2>
           <div className="grid gap-4">
             {pendingDevices.map((device) => (
               <DeviceSetupCard key={device.id} device={device} onConfigure={handleConfigureDevice} />
@@ -305,8 +313,8 @@ export function FeedbackPage() {
 
       {configuredDevices.length === 0 ? (
         <EmptyState
-          title="Activation requise"
-          description="Le module feedback devient exploitable apres activation MAC d au moins un boitier."
+          title={t('feedback.empty.activationRequired.title')}
+          description={t('feedback.empty.activationRequired.description')}
         />
       ) : (
         <>
@@ -321,18 +329,20 @@ export function FeedbackPage() {
                     <h3 className="text-base font-semibold text-[var(--text-primary)]">{device.name}</h3>
                     <p className="text-xs text-[var(--text-secondary)]">{device.location}</p>
                     <p className="mt-1 font-mono text-xs text-[var(--accent-primary)]">
-                      MAC: {device.systemIdentifier ?? 'N/A'}
+                      {t('feedback.labels.mac')}: {device.systemIdentifier ?? t('marketplace.stock.na')}
                     </p>
 
                     <div className="mt-4 grid grid-cols-2 gap-3 text-center text-xs">
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-                        <p className="text-[var(--text-secondary)]">Evenements</p>
+                        <p className="text-[var(--text-secondary)]">{t('feedback.deviceCard.events')}</p>
                         <p className="text-lg font-bold text-[var(--text-primary)]">{deviceHistory.length}</p>
                       </div>
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
-                        <p className="text-[var(--text-secondary)]">Dernier event</p>
+                        <p className="text-[var(--text-secondary)]">{t('feedback.deviceCard.lastEvent')}</p>
                         <p className="text-sm font-semibold text-[var(--accent-primary)]">
-                          {latestEvent ? formatDateTime(latestEvent.occurredAt) : 'Aucun'}
+                          {latestEvent
+                            ? formatDateTime(latestEvent.occurredAt, locale === 'fr' ? 'fr-FR' : 'en-US')
+                            : t('feedback.deviceCard.none')}
                         </p>
                       </div>
                     </div>
@@ -344,7 +354,7 @@ export function FeedbackPage() {
                         onClick={() => setHistoryDeviceId(device.id)}
                       >
                         <History className="h-3 w-3" />
-                        Historique
+                        {t('common.history')}
                       </button>
                       <button
                         type="button"
@@ -363,7 +373,9 @@ export function FeedbackPage() {
 
           <section className="flex flex-wrap items-center gap-3">
             <label className="form-control w-full max-w-xs">
-              <span className="label-text text-xs text-[var(--text-secondary)]">Boitier</span>
+              <span className="label-text text-xs text-[var(--text-secondary)]">
+                {t('feedback.filters.device')}
+              </span>
               <select
                 className="select select-bordered mt-1 bg-[var(--surface-muted)]"
                 value={selectedDeviceId}
@@ -385,41 +397,43 @@ export function FeedbackPage() {
                   className={`join-item btn ${periodDays === days ? 'btn-info text-[var(--app-bg)]' : 'btn-outline btn-info'}`}
                   onClick={() => setPeriodDays(days as 7 | 30 | 90)}
                 >
-                  {days} jours
+                  {t('feedback.filters.days', { days })}
                 </button>
               ))}
             </div>
 
             <button type="button" className="btn btn-outline btn-info" onClick={handleDownloadSelectedPeriodPdf}>
               <Download className="h-4 w-4" />
-              PDF {periodDays} jours
+              {t('feedback.actions.downloadPeriodPdf', { days: periodDays })}
             </button>
           </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <article className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
               <div className="card-body p-4">
-                <p className="text-sm text-[var(--text-secondary)]">Total retours</p>
+                <p className="text-sm text-[var(--text-secondary)]">{t('feedback.metrics.total')}</p>
                 <p className="text-3xl font-bold text-[var(--text-primary)]">{summary.total}</p>
               </div>
             </article>
             <article className="card border border-[var(--success-main)]/40 bg-[var(--success-main)]/10">
               <div className="card-body p-4">
-                <p className="text-sm text-[var(--text-secondary)]">Positifs</p>
+                <p className="text-sm text-[var(--text-secondary)]">{t('feedback.metrics.positive')}</p>
                 <p className="text-3xl font-bold text-[var(--success-main)]">{summary.positive}</p>
               </div>
             </article>
             <article className="card border border-[var(--warning-main)]/40 bg-[var(--warning-main)]/10">
               <div className="card-body p-4">
-                <p className="text-sm text-[var(--text-secondary)]">Neutres</p>
+                <p className="text-sm text-[var(--text-secondary)]">{t('feedback.metrics.neutral')}</p>
                 <p className="text-3xl font-bold text-[var(--warning-main)]">{summary.neutral}</p>
               </div>
             </article>
             <article className="card border border-[var(--error-main)]/40 bg-[var(--error-main)]/10">
               <div className="card-body p-4">
-                <p className="text-sm text-[var(--text-secondary)]">Negatifs</p>
+                <p className="text-sm text-[var(--text-secondary)]">{t('feedback.metrics.negative')}</p>
                 <p className="text-3xl font-bold text-[var(--error-main)]">{summary.negative}</p>
-                <p className="text-xs text-[var(--text-secondary)]">Satisfaction: {satisfactionRate}%</p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {t('feedback.metrics.satisfaction')}: {satisfactionRate}%
+                </p>
               </div>
             </article>
           </section>
@@ -427,7 +441,9 @@ export function FeedbackPage() {
           <section className="grid gap-4 xl:grid-cols-2">
             <article className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
               <div className="card-body p-5">
-                <h3 className="text-base font-semibold text-[var(--text-primary)]">Evolution journaliere</h3>
+                <h3 className="text-base font-semibold text-[var(--text-primary)]">
+                  {t('feedback.charts.dailyEvolution')}
+                </h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={barSeries}>
@@ -436,9 +452,9 @@ export function FeedbackPage() {
                       <YAxis stroke="#8892B0" />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="positive" stackId="a" fill={chartPalette[1]} name="Positif" />
-                      <Bar dataKey="neutral" stackId="a" fill={chartPalette[2]} name="Neutre" />
-                      <Bar dataKey="negative" stackId="a" fill="#FF5252" name="Negatif" />
+                      <Bar dataKey="positive" stackId="a" fill={chartPalette[1]} name={t('feedback.sentiment.positive')} />
+                      <Bar dataKey="neutral" stackId="a" fill={chartPalette[2]} name={t('feedback.sentiment.neutral')} />
+                      <Bar dataKey="negative" stackId="a" fill="#FF5252" name={t('feedback.sentiment.negative')} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -447,7 +463,9 @@ export function FeedbackPage() {
 
             <article className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
               <div className="card-body p-5">
-                <h3 className="text-base font-semibold text-[var(--text-primary)]">Repartition</h3>
+                <h3 className="text-base font-semibold text-[var(--text-primary)]">
+                  {t('feedback.charts.distribution')}
+                </h3>
                 <div className="h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -469,11 +487,11 @@ export function FeedbackPage() {
 
       {selectedHistoryDevice ? (
         <DeviceHistoryDialog
-          moduleLabel={MODULE_LABELS.feedback}
+          moduleLabel={t('module.feedback')}
           deviceName={selectedHistoryDevice.name}
           deviceId={selectedHistoryDevice.id}
           systemIdentifier={selectedHistoryDevice.systemIdentifier}
-          identifierLabel="Bouton"
+          identifierLabel={t('feedback.deviceHistory.identifierLabel')}
           entries={[...selectedDeviceHistory]}
           onClose={() => setHistoryDeviceId(null)}
           onDownloadPdf={() =>

@@ -14,7 +14,6 @@ src/app
   layout/
   modules/
     dashboard/
-    marketplace/
     settings/
     systems/
       rfid-badge/

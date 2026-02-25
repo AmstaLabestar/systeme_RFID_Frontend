@@ -6,9 +6,9 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { IDENTIFIER_LABELS } from '@/app/data';
 import { marketplaceService, queryKeys } from '@/app/services';
 import { useAuth } from '@/app/contexts/auth';
+import { useI18n } from '@/app/contexts/i18n';
 import { useNotifications } from '@/app/contexts/notifications';
 import type {
   DeviceConfigurationInput,
@@ -84,6 +84,7 @@ function isProductAvailable(product: Product, stockById: Record<string, number |
 
 export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const { addNotification } = useNotifications();
   const { user } = useAuth();
   const userScope = user?.id ?? 'guest';
@@ -156,8 +157,8 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
       const result = await purchaseMutation.mutateAsync({ productId, quantity });
 
       const identifierLabel = product.identifierType
-        ? IDENTIFIER_LABELS[product.identifierType]
-        : 'Identifiants';
+        ? t(`identifier.${product.identifierType}`)
+        : t('marketplace.device.identifiers');
       const identifiersPreview = result.createdIdentifiers
         .slice(0, 6)
         .map((identifier) => identifier.code)
@@ -169,17 +170,24 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
       const provisionedMacAddresses = result.createdDevices.map((device) => device.provisionedMacAddress);
 
       const messageParts = [
-        `${quantity}x ${product.label}`,
+        t('marketplace.notification.orderLine', { quantity, product: product.label }),
         provisionedMacAddresses.length > 0
-          ? `MAC allouee(s): ${provisionedMacAddresses.join(', ')}`
+          ? t('marketplace.notification.macAllocated', {
+              macAddresses: provisionedMacAddresses.join(', '),
+            })
           : null,
         result.createdIdentifiers.length > 0
-          ? `${result.createdIdentifiers.length} ${identifierLabel} alloues: ${identifiersPreview}${previewSuffix}`
-          : 'Aucun identifiant a allouer pour ce module.',
+          ? t('marketplace.notification.identifiersAllocated', {
+              count: result.createdIdentifiers.length,
+              identifierLabel,
+              identifiers: identifiersPreview,
+              extraSuffix: previewSuffix,
+            })
+          : t('marketplace.notification.noIdentifierToAllocate'),
       ].filter(Boolean) as string[];
 
       addNotification({
-        title: 'Allocation confirmee',
+        title: t('marketplace.notification.allocationConfirmed'),
         message: messageParts.join(' | '),
         kind: 'success',
         module: product.module,
@@ -193,7 +201,7 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
         redirectModule: result.redirectModule,
       };
     },
-    [fullCatalog, purchaseMutation, addNotification],
+    [fullCatalog, purchaseMutation, addNotification, t],
   );
 
   const configureDevice = useCallback(
@@ -201,14 +209,17 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
       const response = await activateDeviceMutation.mutateAsync({ deviceId, input });
 
       addNotification({
-        title: 'Boitier active',
-        message: `${response.device.name} est lie via ${response.device.systemIdentifier} et actif pour ce module.`,
+        title: t('marketplace.notification.deviceActivatedTitle'),
+        message: t('marketplace.notification.deviceActivatedMessage', {
+          deviceName: response.device.name,
+          systemIdentifier: response.device.systemIdentifier ?? '',
+        }),
         kind: 'success',
         module: response.device.module,
         withToast: true,
       });
     },
-    [activateDeviceMutation, addNotification],
+    [activateDeviceMutation, addNotification, t],
   );
 
   const getDevicesByModule = useCallback(

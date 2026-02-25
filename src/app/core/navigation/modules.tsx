@@ -5,10 +5,16 @@ import {
   LayoutDashboard,
   MessageSquare,
   Settings as SettingsIcon,
-  ShoppingBag,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { Dashboard, FeedbackView, Fingerprint as FingerprintSystem, Marketplace, RFIDBadge, RFIDDoor, Settings } from '@/app/modules';
+import {
+  Dashboard,
+  FeedbackView,
+  Fingerprint as FingerprintSystem,
+  RFIDBadge,
+  RFIDDoor,
+  Settings,
+} from '@/app/modules';
 import type { Device, PageId } from '@/app/shared/types';
 
 interface SidebarItem {
@@ -17,12 +23,9 @@ interface SidebarItem {
   icon: React.ComponentType<any>;
 }
 
-type PurchaseHandler = (items: unknown[]) => void;
-
 interface ModuleRenderContext {
   devices: Device[];
   navigate: (page: PageId) => void;
-  onPurchase: PurchaseHandler;
 }
 
 interface AppModule extends SidebarItem {
@@ -61,12 +64,6 @@ export const appModules: AppModule[] = [
     label: 'Feedback',
     icon: MessageSquare,
     render: ({ devices }) => <FeedbackView devices={devices} />,
-  },
-  {
-    id: 'marketplace',
-    label: 'Marketplace',
-    icon: ShoppingBag,
-    render: ({ onPurchase }) => <Marketplace onPurchase={onPurchase} />,
   },
   {
     id: 'settings',

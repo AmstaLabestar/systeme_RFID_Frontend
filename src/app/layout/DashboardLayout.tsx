@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { useI18n } from '@/app/contexts';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
 export function DashboardLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const { t } = useI18n();
 
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-primary)]">
@@ -20,7 +22,7 @@ export function DashboardLayout() {
         {mobileSidebarOpen && (
           <button
             type="button"
-            aria-label="Fermer la navigation"
+            aria-label={t('topbar.closeNavigation')}
             className="fixed inset-0 z-20 bg-black/50 md:hidden"
             onClick={() => setMobileSidebarOpen(false)}
           />
