@@ -3,6 +3,7 @@ export type ModuleKey = 'rfid-presence' | 'rfid-porte' | 'biometrie' | 'feedback
 export type DashboardPage =
   | 'overview'
   | 'marketplace'
+  | 'admin-stock'
   | 'rfid-presence'
   | 'rfid-porte'
   | 'biometrie'
@@ -19,6 +20,7 @@ export interface AuthUser {
   lastName: string;
   email: string;
   company: string;
+  roleName?: string;
 }
 
 export interface Product {
@@ -131,6 +133,7 @@ export interface DashboardNavItem {
   label: string;
   path: string;
   module?: ModuleKey;
+  roles?: string[];
 }
 
 export interface DeviceConfigurationInput {

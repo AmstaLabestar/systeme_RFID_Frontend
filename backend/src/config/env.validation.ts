@@ -55,4 +55,10 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.string().allow('').optional(),
   }),
 
+  ALLOCATION_RESERVATION_TTL_MS: Joi.number().integer().min(60000).default(300000),
+  ALLOCATION_RESERVATION_CLEANUP_INTERVAL_MS: Joi.number().integer().min(10000).default(60000),
+  OUTBOX_DISPATCH_INTERVAL_MS: Joi.number().integer().min(5000).default(15000),
+  OUTBOX_MAX_RETRY_ATTEMPTS: Joi.number().integer().min(1).max(20).default(5),
+  OUTBOX_WEBHOOK_TIMEOUT_MS: Joi.number().integer().min(1000).max(30000).default(5000),
+
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, GoneException, Param, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
@@ -23,8 +23,10 @@ export class MarketplaceController {
   }
 
   @Post('purchases')
-  purchaseProduct(@CurrentUser() user: AccessTokenPayload, @Body() dto: PurchaseProductDto) {
-    return this.marketplaceService.purchaseProduct(user.userId, dto);
+  purchaseProduct(@CurrentUser() _user: AccessTokenPayload, @Body() _dto: PurchaseProductDto) {
+    throw new GoneException(
+      'Endpoint legacy deprecie. Utilisez POST /marketplace/orders (allocation-only).',
+    );
   }
 
   @Post('devices/:deviceId/activate')

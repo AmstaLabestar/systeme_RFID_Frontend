@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { HardwareSystemCode, IdentifierType, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -54,6 +54,70 @@ async function main() {
       roleId: role.id,
     },
   });
+
+  const defaultSystems = [
+    {
+      name: 'RFID Presence',
+      code: HardwareSystemCode.RFID_PRESENCE,
+      hasIdentifiers: true,
+      identifiersPerDevice: 5,
+      identifierType: IdentifierType.BADGE,
+      deviceUnitPriceCents: 21000,
+      extensionUnitPriceCents: 1000,
+      currency: 'XOF',
+      isActive: true,
+    },
+    {
+      name: 'RFID Porte',
+      code: HardwareSystemCode.RFID_PORTE,
+      hasIdentifiers: true,
+      identifiersPerDevice: 5,
+      identifierType: IdentifierType.SERRURE,
+      deviceUnitPriceCents: 20000,
+      extensionUnitPriceCents: 1000,
+      currency: 'XOF',
+      isActive: true,
+    },
+    {
+      name: 'Biometrie',
+      code: HardwareSystemCode.BIOMETRIE,
+      hasIdentifiers: true,
+      identifiersPerDevice: 5,
+      identifierType: IdentifierType.EMPREINTE,
+      deviceUnitPriceCents: 20000,
+      extensionUnitPriceCents: 1000,
+      currency: 'XOF',
+      isActive: true,
+    },
+    {
+      name: 'Feedback',
+      code: HardwareSystemCode.FEEDBACK,
+      hasIdentifiers: false,
+      identifiersPerDevice: 0,
+      identifierType: null,
+      deviceUnitPriceCents: 15000,
+      extensionUnitPriceCents: 0,
+      currency: 'XOF',
+      isActive: true,
+    },
+  ];
+
+  for (const system of defaultSystems) {
+    await prisma.businessSystem.upsert({
+      where: { code: system.code },
+      update: {
+        name: system.name,
+        hasIdentifiers: system.hasIdentifiers,
+        identifiersPerDevice: system.identifiersPerDevice,
+        identifierType: system.identifierType,
+        deviceUnitPriceCents: system.deviceUnitPriceCents,
+        extensionUnitPriceCents: system.extensionUnitPriceCents,
+        currency: system.currency,
+        isActive: system.isActive,
+      },
+      create: system,
+    });
+  }
 
   // eslint-disable-next-line no-console
   console.log('Seed complete.');

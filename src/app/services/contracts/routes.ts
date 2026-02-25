@@ -11,10 +11,30 @@ export const AUTH_ROUTES = {
 } as const;
 
 export const MARKETPLACE_ROUTES = {
-  catalog: '/marketplace/catalog',
-  state: '/marketplace/state',
-  purchases: '/marketplace/purchases',
-  activateDevice: (deviceId: string) => `/marketplace/devices/${deviceId}/activate`,
+  systems: '/marketplace/systems',
+  state: '/devices/my',
+  orders: '/marketplace/orders',
+  activateDevice: (deviceId: string) => `/devices/${deviceId}/configure`,
+} as const;
+
+export const ADMIN_ROUTES = {
+  systems: '/admin/systems',
+  createSystem: '/admin/systems',
+  updateSystemActivation: (systemId: string) => `/admin/systems/${systemId}/activation`,
+  updateSystemPricing: (systemId: string) => `/admin/systems/${systemId}/pricing`,
+  createDevicesBulk: (systemId: string) => `/admin/systems/${systemId}/devices/bulk`,
+  validateDevicesImport: (systemId: string) =>
+    `/admin/systems/${systemId}/devices/import/validate`,
+  createSystemIdentifiersBulk: (systemId: string) => `/admin/systems/${systemId}/identifiers/bulk`,
+  createDeviceIdentifiers: (deviceId: string) => `/admin/devices/${deviceId}/identifiers`,
+  inventoryDevices: '/admin/inventory/devices',
+  inventoryDeviceById: (deviceId: string) => `/admin/inventory/devices/${deviceId}`,
+  inventoryAlerts: '/admin/inventory/alerts/low-stock',
+  inventoryMovements: '/admin/inventory/movements',
+  adminLogs: '/admin/logs',
+  webhooks: '/admin/webhooks',
+  updateWebhookActivation: (webhookId: string) => `/admin/webhooks/${webhookId}/activation`,
+  testWebhook: (webhookId: string) => `/admin/webhooks/${webhookId}/test`,
 } as const;
 
 export const SERVICES_ROUTES = {

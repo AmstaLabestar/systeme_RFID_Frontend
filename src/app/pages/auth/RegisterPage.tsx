@@ -94,7 +94,7 @@ export function RegisterPage() {
   return (
     <AuthShell
       title="Inscription"
-      subtitle="Creez votre espace SaaS pour centraliser vos acces IoT."
+      subtitle="Creez votre espace pour gerer vos service."
       footerText="Vous avez deja un compte ?"
       footerLinkLabel="Se connecter"
       footerLinkTo="/auth/login"
@@ -144,10 +144,10 @@ export function RegisterPage() {
           <input
             type="tel"
             className={fieldInputClassName}
-            placeholder="+2250700000000"
+            placeholder="+22670000000"
             {...register('phoneNumber', {
               pattern: {
-                value: /^\+?[1-9]\d{7,14}$/,
+                value: /^\+?[1-9]\d{7,11}$/,
                 message: 'Format international invalide',
               },
             })}

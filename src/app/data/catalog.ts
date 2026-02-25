@@ -24,6 +24,12 @@ export const BASE_NAV_ITEMS: DashboardNavItem[] = [
   { page: 'overview', label: 'Overview', path: '/dashboard/overview' },
   { page: 'marketplace', label: 'Marketplace', path: '/dashboard/marketplace' },
   {
+    page: 'admin-stock',
+    label: 'Admin Stock',
+    path: '/dashboard/admin-stock',
+    roles: ['admin'],
+  },
+  {
     page: 'rfid-presence',
     label: 'RFID Presence',
     path: '/dashboard/rfid-presence',
