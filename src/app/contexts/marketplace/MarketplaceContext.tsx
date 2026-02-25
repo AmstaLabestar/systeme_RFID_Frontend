@@ -171,15 +171,15 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
       const messageParts = [
         `${quantity}x ${product.label}`,
         provisionedMacAddresses.length > 0
-          ? `MAC livree: ${provisionedMacAddresses.join(', ')}`
+          ? `MAC allouee(s): ${provisionedMacAddresses.join(', ')}`
           : null,
         result.createdIdentifiers.length > 0
-          ? `${result.createdIdentifiers.length} ${identifierLabel} crees: ${identifiersPreview}${previewSuffix}`
-          : 'Aucun identifiant a provisionner pour ce module.',
+          ? `${result.createdIdentifiers.length} ${identifierLabel} alloues: ${identifiersPreview}${previewSuffix}`
+          : 'Aucun identifiant a allouer pour ce module.',
       ].filter(Boolean) as string[];
 
       addNotification({
-        title: 'Achat confirme',
+        title: 'Allocation confirmee',
         message: messageParts.join(' | '),
         kind: 'success',
         module: product.module,

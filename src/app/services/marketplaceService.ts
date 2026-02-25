@@ -30,6 +30,11 @@ interface MarketplaceSystemStock {
   availableExtensions?: number;
 }
 
+function createIdempotencyKey(productId: string, quantity: number): string {
+  const bucket = Math.floor(Date.now() / 10_000);
+  return `order:${productId}:${quantity}:${bucket}`;
+}
+
 function getStockMapFromSystems(catalog: Product[], rawSystems: unknown): Record<string, number | null> {
   const systems = Array.isArray(rawSystems) ? (rawSystems as MarketplaceSystemStock[]) : [];
   const stockByProductId = new Map<string, number>();
@@ -93,9 +98,15 @@ export const marketplaceService = {
 
   async purchaseProduct(payload: { productId: string; quantity: number }): Promise<PurchaseProductResponse> {
     try {
+      const idempotencyKey = createIdempotencyKey(payload.productId, payload.quantity);
       const response = await systemApiClient.post<unknown>(
         MARKETPLACE_ROUTES.orders,
         toPurchasePayload(payload),
+        {
+          headers: {
+            'Idempotency-Key': idempotencyKey,
+          },
+        },
       );
       const purchase = toPurchaseResponse(response.data);
       const refreshedState = await this.fetchMarketplaceState();
