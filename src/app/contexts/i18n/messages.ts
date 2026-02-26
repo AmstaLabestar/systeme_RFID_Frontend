@@ -185,6 +185,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'marketplace.allocate.extensions': 'Allouer extensions',
     'marketplace.allocate.productUnavailable': '{product} indisponible',
     'marketplace.allocate.product': 'Allouer {quantity} {product}',
+    'marketplace.extensions.flowHint':
+      'Chaque boitier inclut 5 extensions offertes. Achetez des extensions supplementaires pour les employes en plus, puis affectez-les a un boitier depuis le module.',
     'marketplace.onboarding.title': 'Mes equipements: checklist onboarding',
     'marketplace.onboarding.name': 'Nom',
     'marketplace.onboarding.location': 'Emplacement',
@@ -273,6 +275,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'access.form.deviceRequired': 'Boitier requis',
     'access.form.identifierRequired': 'Identifiant requis',
     'access.form.noIdentifierAvailable': 'Aucun identifiant disponible.',
+    'access.form.marketplacePoolHint':
+      '{count} extension(s) supplementaire(s) du marketplace sont disponibles pour ce boitier.',
+    'access.form.identifierSource.bound': 'Lie boitier',
+    'access.form.identifierSource.pool': 'Extension',
     'access.activeAssignments.title': 'Affectations actives',
     'access.activeAssignments.none': 'Aucune affectation active.',
     'access.activeAssignments.reassign': 'Reaffecter',
@@ -672,6 +678,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'marketplace.allocate.extensions': 'Allocate extensions',
     'marketplace.allocate.productUnavailable': '{product} unavailable',
     'marketplace.allocate.product': 'Allocate {quantity} {product}',
+    'marketplace.extensions.flowHint':
+      'Each device includes 5 free extensions. Buy additional extensions for extra employees, then assign them to a device from the module page.',
     'marketplace.onboarding.title': 'My devices: onboarding checklist',
     'marketplace.onboarding.name': 'Name',
     'marketplace.onboarding.location': 'Location',
@@ -760,6 +768,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'access.form.deviceRequired': 'Device is required',
     'access.form.identifierRequired': 'Identifier is required',
     'access.form.noIdentifierAvailable': 'No identifier available.',
+    'access.form.marketplacePoolHint':
+      '{count} additional marketplace extension(s) are available for this device.',
+    'access.form.identifierSource.bound': 'Device linked',
+    'access.form.identifierSource.pool': 'Extension',
     'access.activeAssignments.title': 'Active assignments',
     'access.activeAssignments.none': 'No active assignment.',
     'access.activeAssignments.reassign': 'Reassign',

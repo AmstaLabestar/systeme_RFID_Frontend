@@ -45,5 +45,6 @@ This backend applies defensive controls aligned to OWASP Top 10 (2021):
 - Request-level metadata persisted for refresh token issuance.
 
 10. `A10 SSRF`
-- No user-driven outbound URL fetching.
-- External calls are restricted to explicit providers (Google token verify and SMTP gateway).
+- Outbound webhook targets are admin-configured and validated before persistence.
+- URL validation blocks private/loopback/reserved destinations and enforces HTTPS in production.
+- External calls remain limited to explicit providers (Google token verify, SMTP, validated webhooks).

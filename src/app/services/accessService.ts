@@ -3,6 +3,7 @@ import {
   SERVICES_ROUTES,
   toAssignIdentifierPayload,
   toReassignIdentifierPayload,
+  toServicesState,
   toServiceMutationResponse,
 } from './contracts';
 import { systemApiClient, toApiErrorMessage } from './httpClient';
@@ -23,6 +24,15 @@ export interface ServiceMutationResponse {
 }
 
 export const accessService = {
+  async fetchServicesState(): Promise<ServicesStatePayload> {
+    try {
+      const response = await systemApiClient.get<unknown>(SERVICES_ROUTES.state);
+      return toServicesState(response.data);
+    } catch (error) {
+      throw new Error(toApiErrorMessage(error, 'Impossible de charger l etat Services.'));
+    }
+  },
+
   async assignIdentifier(payload: AssignIdentifierInput): Promise<ServiceMutationResponse> {
     try {
       const response = await systemApiClient.post<unknown>(

@@ -41,11 +41,23 @@ const DEFAULT_SYSTEM_PRICING: Record<
 
 type ProvisionMode = 'manual' | 'csv';
 
+const SYSTEM_IDENTIFIER_TYPE_MAP: Record<
+  Exclude<HardwareSystemCode, 'FEEDBACK'>,
+  IdentifierType
+> = {
+  RFID_PRESENCE: 'BADGE',
+  RFID_PORTE: 'SERRURE',
+  BIOMETRIE: 'EMPREINTE',
+};
+
 interface SystemPricingDraft {
   deviceUnitPriceCents: string;
   extensionUnitPriceCents: string;
   currency: string;
 }
+
+const MAC_ADDRESS_REGEX = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
+const GENERIC_IDENTIFIER_REGEX = /^[A-Z0-9][A-Z0-9:_-]{1,119}$/;
 
 function parseRows(text: string): AdminBulkDeviceItem[] {
   return text
@@ -58,9 +70,12 @@ function parseRows(text: string): AdminBulkDeviceItem[] {
         .map((value) => value.trim())
         .filter((value) => value.length > 0);
       const [macAddress, ...identifiers] = parts;
+      const normalizedIdentifiers = identifiers
+        .map((identifier) => normalizePhysicalIdentifierInput(identifier))
+        .filter((identifier) => identifier.length > 0);
       return {
-        macAddress: macAddress ?? '',
-        identifiers: identifiers.length > 0 ? identifiers : undefined,
+        macAddress: normalizeMacInput(macAddress ?? ''),
+        identifiers: normalizedIdentifiers.length > 0 ? normalizedIdentifiers : undefined,
       };
     });
 }
@@ -75,13 +90,26 @@ function parseExtensionRows(text: string): string[] {
         .split(/[;,]/)
         .map((value) => value.trim())
         .filter((value) => value.length > 0);
-      return (parts[0] ?? '').toUpperCase();
+      return normalizePhysicalIdentifierInput(parts[0] ?? '');
     })
     .filter((identifier) => identifier.length > 0);
 }
 
 function normalizeMacInput(value: string): string {
-  return value.trim().toUpperCase().replaceAll('-', ':');
+  return value.trim().toUpperCase().replace(/-/g, ':');
+}
+
+function normalizePhysicalIdentifierInput(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  const normalizedAsMac = normalized.replace(/-/g, ':');
+  if (MAC_ADDRESS_REGEX.test(normalizedAsMac)) {
+    return normalizedAsMac;
+  }
+  return normalized;
+}
+
+function isValidPhysicalIdentifier(value: string): boolean {
+  return MAC_ADDRESS_REGEX.test(value) || GENERIC_IDENTIFIER_REGEX.test(value);
 }
 
 function formatDateTime(value?: string): string {
@@ -123,6 +151,16 @@ export function AdminStockPage() {
   const role = user?.roleName?.trim().toLowerCase();
   const isAdmin = role === 'admin';
   const canManageStock = isAdmin;
+
+  const getIdentifierTypeLabel = (type?: IdentifierType | null) => {
+    if (type === 'EMPREINTE') {
+      return t('identifier.empreinte');
+    }
+    if (type === 'SERRURE') {
+      return t('identifier.serrure-rfid');
+    }
+    return t('identifier.badge-rfid');
+  };
 
   const [importSystemId, setImportSystemId] = useState('');
   const [importWarehouseCode, setImportWarehouseCode] = useState('MAIN');
@@ -205,9 +243,21 @@ export function AdminStockPage() {
     () => extensionCapableSystems.find((system) => system.id === extensionSystemId) ?? null,
     [extensionCapableSystems, extensionSystemId],
   );
+  const expectedCreateIdentifierType =
+    createSystemPayload.code === 'FEEDBACK'
+      ? null
+      : SYSTEM_IDENTIFIER_TYPE_MAP[
+          createSystemPayload.code as Exclude<HardwareSystemCode, 'FEEDBACK'>
+        ];
   const requiredIdentifiersPerDevice = selectedImportSystem?.hasIdentifiers
     ? selectedImportSystem.identifiersPerDevice
     : 0;
+  const selectedImportIdentifierLabel = selectedImportSystem
+    ? getIdentifierTypeLabel(selectedImportSystem.identifierType)
+    : getIdentifierTypeLabel();
+  const selectedExtensionIdentifierLabel = selectedExtensionSystem
+    ? getIdentifierTypeLabel(selectedExtensionSystem.identifierType)
+    : getIdentifierTypeLabel();
   const parsedCsvRows = useMemo(() => parseRows(importRawInput), [importRawInput]);
   const draftRows = provisionMode === 'manual' ? manualBatchDevices : parsedCsvRows;
   const parsedExtensionCsvRows = useMemo(
@@ -224,6 +274,15 @@ export function AdminStockPage() {
     return Object.entries(counts)
       .filter(([, count]) => count > 1)
       .map(([identifier]) => identifier);
+  }, [extensionDraftIdentifiers]);
+  const invalidExtensionIdentifiers = useMemo(
+    () => extensionDraftIdentifiers.filter((identifier) => !isValidPhysicalIdentifier(identifier)),
+    [extensionDraftIdentifiers],
+  );
+  const readyExtensionCount = useMemo(() => {
+    const uniqueIdentifiers = new Set(extensionDraftIdentifiers);
+    return Array.from(uniqueIdentifiers).filter((identifier) => isValidPhysicalIdentifier(identifier))
+      .length;
   }, [extensionDraftIdentifiers]);
 
   const lowStockAlertsQuery = useQuery({
@@ -498,9 +557,16 @@ export function AdminStockPage() {
       return;
     }
 
-    const normalizedIdentifier = manualIdentifierInput.trim().toUpperCase();
+    const normalizedIdentifier = normalizePhysicalIdentifierInput(manualIdentifierInput);
     if (!normalizedIdentifier) {
       toast.error(t('adminStock.toast.enterExtensionIdentifier'));
+      return;
+    }
+
+    if (!isValidPhysicalIdentifier(normalizedIdentifier)) {
+      toast.error(
+        'Identifiant invalide. Utilisez une MAC (AA:BB:CC:DD:EE:FF) ou un code alphanumerique (A-Z, 0-9, -, _, :).',
+      );
       return;
     }
 
@@ -575,9 +641,16 @@ export function AdminStockPage() {
       return;
     }
 
-    const normalizedIdentifier = manualExtensionInput.trim().toUpperCase();
+    const normalizedIdentifier = normalizePhysicalIdentifierInput(manualExtensionInput);
     if (!normalizedIdentifier) {
       toast.error(t('adminStock.toast.enterExtensionIdentifier'));
+      return;
+    }
+
+    if (!isValidPhysicalIdentifier(normalizedIdentifier)) {
+      toast.error(
+        'Identifiant invalide. Utilisez une MAC (AA:BB:CC:DD:EE:FF) ou un code alphanumerique (A-Z, 0-9, -, _, :).',
+      );
       return;
     }
 
@@ -662,6 +735,11 @@ export function AdminStockPage() {
 
     if (duplicateExtensionIdentifiers.length > 0) {
       toast.error(t('adminStock.toast.batchContainsDuplicates'));
+      return;
+    }
+
+    if (invalidExtensionIdentifiers.length > 0) {
+      toast.error('Le lot contient des identifiants invalides.');
       return;
     }
 
@@ -783,18 +861,18 @@ export function AdminStockPage() {
     }
 
     const isFeedbackSystem = createSystemPayload.code === 'FEEDBACK';
+    const resolvedIdentifierType = isFeedbackSystem
+      ? undefined
+      : SYSTEM_IDENTIFIER_TYPE_MAP[
+          createSystemPayload.code as Exclude<HardwareSystemCode, 'FEEDBACK'>
+        ];
     createSystemMutation.mutate({
       name: createSystemPayload.name.trim(),
       code: createSystemPayload.code,
-      hasIdentifiers: isFeedbackSystem ? false : createSystemPayload.hasIdentifiers,
+      hasIdentifiers: !isFeedbackSystem,
       identifiersPerDevice:
-        !isFeedbackSystem && createSystemPayload.hasIdentifiers
-          ? createSystemPayload.identifiersPerDevice
-          : 0,
-      identifierType:
-        !isFeedbackSystem && createSystemPayload.hasIdentifiers
-          ? createSystemPayload.identifierType
-          : undefined,
+        !isFeedbackSystem ? createSystemPayload.identifiersPerDevice : 0,
+      identifierType: resolvedIdentifierType,
       deviceUnitPriceCents: Math.max(0, Math.trunc(createSystemPayload.deviceUnitPriceCents)),
       extensionUnitPriceCents: isFeedbackSystem
         ? 0
@@ -1014,7 +1092,7 @@ export function AdminStockPage() {
             <div className="text-xs text-[var(--text-secondary)]">
               {selectedImportSystem
                 ? selectedImportSystem.hasIdentifiers
-                  ? `${requiredIdentifiersPerDevice} extension(s) requise(s) par boitier.`
+                  ? `${requiredIdentifiersPerDevice} identifiant(s) ${selectedImportIdentifierLabel} requis par boitier.`
                   : 'Aucun identifiant attendu pour ce systeme.'
                 : 'Selectionnez un systeme.'}
             </div>
@@ -1045,14 +1123,16 @@ export function AdminStockPage() {
                   {selectedImportSystem.hasIdentifiers ? (
                     <div className="space-y-3">
                       <p className="text-sm text-[var(--text-secondary)]">
-                        Extensions ({manualIdentifiers.length}/{requiredIdentifiersPerDevice})
+                        {selectedImportIdentifierLabel} ({manualIdentifiers.length}/{requiredIdentifiersPerDevice})
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <input
                           className="input input-bordered grow bg-[var(--card-bg)] font-mono"
-                          placeholder="ID extension"
+                          placeholder={`Identifiant ${selectedImportIdentifierLabel}`}
                           value={manualIdentifierInput}
-                          onChange={(event) => setManualIdentifierInput(event.target.value.toUpperCase())}
+                          onChange={(event) =>
+                            setManualIdentifierInput(normalizePhysicalIdentifierInput(event.target.value))
+                          }
                           onKeyDown={(event) => {
                             if (event.key === 'Enter') {
                               event.preventDefault();
@@ -1075,7 +1155,7 @@ export function AdminStockPage() {
                       <div className="flex flex-wrap gap-2">
                         {manualIdentifiers.length === 0 ? (
                           <p className="text-xs text-[var(--text-secondary)]">
-                            Ajoutez les extensions une a une.
+                            Ajoutez les identifiants un a un.
                           </p>
                         ) : (
                           manualIdentifiers.map((identifier) => (
@@ -1092,6 +1172,9 @@ export function AdminStockPage() {
                           ))
                         )}
                       </div>
+                      <p className="text-xs text-[var(--text-secondary)]">
+                        Format accepte: MAC (AA:BB:CC:DD:EE:FF) ou code alphanumerique (A-Z, 0-9, -, _, :).
+                      </p>
                     </div>
                   ) : (
                     <p className="text-sm text-[var(--text-secondary)]">
@@ -1165,10 +1248,10 @@ export function AdminStockPage() {
           ) : (
             <div className="space-y-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
               <p className="text-xs text-[var(--text-secondary)]">
-                Format attendu: MAC puis extensions. Exemple:
+                Format attendu: MAC boitier puis identifiants. Exemple:
                 {' '}
                 {selectedImportSystem?.hasIdentifiers
-                  ? 'AA:70:31:00:00:01,EXT-001,EXT-002,EXT-003,EXT-004,EXT-005'
+                  ? 'AA:70:31:00:00:01,BADGE-001,BADGE-002,BADGE-003,BADGE-004,BADGE-005'
                   : 'AA:70:34:00:00:01'}
               </p>
               <input
@@ -1179,7 +1262,7 @@ export function AdminStockPage() {
               />
               <textarea
                 className="textarea textarea-bordered min-h-36 bg-[var(--card-bg)] font-mono text-xs"
-                placeholder="AA:70:31:00:00:01,EXT-001,EXT-002,EXT-003,EXT-004,EXT-005"
+                placeholder="AA:70:31:00:00:01,AA:70:31:00:10:01,AA:70:31:00:10:02,AA:70:31:00:10:03,AA:70:31:00:10:04,AA:70:31:00:10:05"
                 value={importRawInput}
                 onChange={(event) => setImportRawInput(event.target.value)}
               />
@@ -1348,7 +1431,7 @@ export function AdminStockPage() {
             </label>
             <div className="text-xs text-[var(--text-secondary)]">
               {selectedExtensionSystem
-                ? `Type attendu: ${selectedExtensionSystem.identifierType ?? 'N/A'}`
+                ? `Type attendu: ${selectedExtensionIdentifierLabel} (${selectedExtensionSystem.identifierType ?? 'N/A'})`
                 : 'Selectionnez un systeme qui supporte les extensions.'}
             </div>
           </div>
@@ -1360,9 +1443,11 @@ export function AdminStockPage() {
                   <div className="flex flex-wrap gap-2">
                     <input
                       className="input input-bordered grow bg-[var(--card-bg)] font-mono"
-                      placeholder="ID extension"
+                      placeholder={`Identifiant ${selectedExtensionIdentifierLabel}`}
                       value={manualExtensionInput}
-                      onChange={(event) => setManualExtensionInput(event.target.value.toUpperCase())}
+                      onChange={(event) =>
+                        setManualExtensionInput(normalizePhysicalIdentifierInput(event.target.value))
+                      }
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') {
                           event.preventDefault();
@@ -1382,7 +1467,7 @@ export function AdminStockPage() {
                   <div className="flex flex-wrap gap-2">
                     {manualExtensionBatch.length === 0 ? (
                       <p className="text-xs text-[var(--text-secondary)]">
-                        Saisissez un ID extension puis cliquez sur OK.
+                        Saisissez un identifiant puis cliquez sur OK.
                       </p>
                     ) : (
                       manualExtensionBatch.map((identifier) => (
@@ -1399,6 +1484,9 @@ export function AdminStockPage() {
                       ))
                     )}
                   </div>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Format accepte: MAC (AA:BB:CC:DD:EE:FF) ou code alphanumerique (A-Z, 0-9, -, _, :).
+                  </p>
                 </>
               ) : (
                 <p className="text-sm text-[var(--text-secondary)]">
@@ -1409,7 +1497,7 @@ export function AdminStockPage() {
           ) : (
             <div className="space-y-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
               <p className="text-xs text-[var(--text-secondary)]">
-                Format attendu: une extension par ligne (ou 1ere colonne CSV).
+                Format attendu: un identifiant par ligne (ou 1ere colonne CSV).
               </p>
               <input
                 type="file"
@@ -1419,7 +1507,7 @@ export function AdminStockPage() {
               />
               <textarea
                 className="textarea textarea-bordered min-h-32 bg-[var(--card-bg)] font-mono text-xs"
-                placeholder={'EXT-0001\nEXT-0002\nEXT-0003'}
+                placeholder={'AA:70:31:00:10:01\nAA:70:31:00:10:02\nAA:70:31:00:10:03'}
                 value={extensionRawInput}
                 onChange={(event) => setExtensionRawInput(event.target.value)}
               />
@@ -1442,7 +1530,7 @@ export function AdminStockPage() {
             <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
               <p className="text-xs text-[var(--text-secondary)]">Pret a confirmer</p>
               <p className="text-xl font-semibold text-[var(--text-primary)]">
-                {extensionDraftIdentifiers.length - duplicateExtensionIdentifiers.length}
+                {readyExtensionCount}
               </p>
             </div>
           </div>
@@ -1455,7 +1543,8 @@ export function AdminStockPage() {
                 createExtensionsMutation.isPending ||
                 !selectedExtensionSystem ||
                 extensionDraftIdentifiers.length === 0 ||
-                duplicateExtensionIdentifiers.length > 0
+                duplicateExtensionIdentifiers.length > 0 ||
+                invalidExtensionIdentifiers.length > 0
               }
               onClick={handleConfirmExtensions}
             >
@@ -1477,6 +1566,15 @@ export function AdminStockPage() {
               Doublons detectes: {duplicateExtensionIdentifiers.slice(0, 6).join(', ')}
               {duplicateExtensionIdentifiers.length > 6
                 ? ` (+${duplicateExtensionIdentifiers.length - 6} autres)`
+                : ''}
+            </div>
+          ) : null}
+
+          {invalidExtensionIdentifiers.length > 0 ? (
+            <div className="rounded-lg border border-[var(--error-main)]/40 bg-[var(--error-main)]/10 p-3 text-sm text-[var(--text-primary)]">
+              Identifiants invalides: {invalidExtensionIdentifiers.slice(0, 6).join(', ')}
+              {invalidExtensionIdentifiers.length > 6
+                ? ` (+${invalidExtensionIdentifiers.length - 6} autres)`
                 : ''}
             </div>
           ) : null}
@@ -1530,10 +1628,14 @@ export function AdminStockPage() {
                     const nextCode = event.target.value as HardwareSystemCode;
                     const isFeedbackSystem = nextCode === 'FEEDBACK';
                     const defaultPricing = DEFAULT_SYSTEM_PRICING[nextCode];
+                    const forcedIdentifierType = isFeedbackSystem
+                      ? prev.identifierType
+                      : SYSTEM_IDENTIFIER_TYPE_MAP[nextCode as Exclude<HardwareSystemCode, 'FEEDBACK'>];
                     return {
                       ...prev,
                       code: nextCode,
-                      hasIdentifiers: isFeedbackSystem ? false : prev.hasIdentifiers,
+                      hasIdentifiers: !isFeedbackSystem,
+                      identifierType: forcedIdentifierType,
                       deviceUnitPriceCents: defaultPricing.deviceUnitPriceCents,
                       extensionUnitPriceCents: defaultPricing.extensionUnitPriceCents,
                       currency: defaultPricing.currency,
@@ -1550,29 +1652,32 @@ export function AdminStockPage() {
               <select
                 className="select select-bordered bg-[var(--surface-muted)]"
                 value={createSystemPayload.identifierType}
-                onChange={(event) =>
-                  setCreateSystemPayload((prev) => ({ ...prev, identifierType: event.target.value as IdentifierType }))
-                }
-                disabled={!createSystemPayload.hasIdentifiers || createSystemPayload.code === 'FEEDBACK'}
+                onChange={() => undefined}
+                disabled
               >
-                <option value="BADGE">BADGE</option>
-                <option value="SERRURE">SERRURE</option>
-                <option value="EMPREINTE">EMPREINTE</option>
+                {expectedCreateIdentifierType ? (
+                  <option value={expectedCreateIdentifierType}>
+                    {expectedCreateIdentifierType} ({getIdentifierTypeLabel(expectedCreateIdentifierType)})
+                  </option>
+                ) : (
+                  <option value={createSystemPayload.identifierType}>Aucun</option>
+                )}
               </select>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Mapping impose: RFID Presence = BADGE, RFID Porte = SERRURE, Biometrie = EMPREINTE.
+              </p>
               <label className="label cursor-pointer justify-start gap-2">
                 <input
                   type="checkbox"
                   className="toggle toggle-info"
-                  checked={createSystemPayload.hasIdentifiers}
-                  onChange={(event) =>
-                    setCreateSystemPayload((prev) => ({ ...prev, hasIdentifiers: event.target.checked }))
-                  }
-                  disabled={createSystemPayload.code === 'FEEDBACK'}
+                  checked={createSystemPayload.code !== 'FEEDBACK'}
+                  onChange={() => undefined}
+                  disabled
                 />
                 <span className="label-text">
                   {createSystemPayload.code === 'FEEDBACK'
                     ? 'Sans identifiants (impose pour FEEDBACK)'
-                    : 'Avec identifiants'}
+                    : 'Avec identifiants (impose par le type de systeme)'}
                 </span>
               </label>
               <div className="grid gap-2 md:grid-cols-3">

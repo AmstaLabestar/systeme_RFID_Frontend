@@ -38,6 +38,17 @@ enum IdentifierStatus {
   ASSIGNED
 }
 
+enum FeedbackSentiment {
+  NEGATIVE
+  NEUTRAL
+  POSITIVE
+}
+
+enum FeedbackSource {
+  BUTTON
+  QR
+}
+
 enum OrderTargetType {
   DEVICE
   IDENTIFIER_EXTENSION
@@ -134,8 +145,10 @@ model User {
   tenant                   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   refreshTokens            RefreshToken[]
   magicLinkTokens          MagicLinkToken[]
-  marketplaceState         MarketplaceState?
-  servicesState            ServicesState?
+  employees                Employee[]        @relation("user_employees")
+  serviceAssignments       ServiceAssignment[] @relation("user_service_assignments")
+  serviceHistoryEvents     ServiceHistoryEvent[] @relation("user_service_history_events")
+  feedbackEvents           FeedbackEvent[]   @relation("user_feedback_events")
   ownedDevices             Device[]          @relation("user_devices")
   createdDevices           Device[]          @relation("admin_created_devices")
   ownedIdentifiers         Identifier[]      @relation("user_identifiers")
@@ -188,33 +201,6 @@ model MagicLinkToken {
   @@map("magic_link_tokens")
 }
 
-model MarketplaceState {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productStockById Json
-  devices          Json
-  inventory        Json
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@map("marketplace_states")
-}
-
-model ServicesState {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employees       Json
-  assignments     Json
-  history         Json
-  feedbackRecords Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@map("services_states")
-}
-
 model BusinessSystem {
   id                   String            @id @default(uuid())
   name                 String
@@ -254,6 +240,9 @@ model Device {
   reservedAt          DateTime?
   reservationExpiresAt DateTime?
   identifiers         Identifier[]
+  serviceAssignments  ServiceAssignment[] @relation("device_service_assignments")
+  serviceHistoryEvents ServiceHistoryEvent[] @relation("device_service_history_events")
+  feedbackEvents      FeedbackEvent[] @relation("device_feedback_events")
   allocations         Allocation[]
   stockMovements      StockMovement[]
   outboxEvents        OutboxEvent[]
@@ -296,6 +285,8 @@ model Identifier {
   physicalIdentifier  String           @unique
   status              IdentifierStatus @default(IN_STOCK)
   allocations         Allocation[]
+  serviceAssignment   ServiceAssignment? @relation("identifier_service_assignment")
+  serviceHistoryEvents ServiceHistoryEvent[] @relation("identifier_service_history_events")
   stockMovements      StockMovement[]
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
@@ -312,6 +303,85 @@ model Identifier {
   @@index([systemId, warehouseCode, status])
   @@index([physicalIdentifier])
   @@map("identifiers")
+}
+
+model Employee {
+  id                 String               @id @default(uuid())
+  ownerId            String
+  owner              User                 @relation("user_employees", fields: [ownerId], references: [id], onDelete: Cascade)
+  firstName          String
+  lastName           String
+  normalizedFullName String
+  assignments        ServiceAssignment[]  @relation("employee_service_assignments")
+  historyEvents      ServiceHistoryEvent[] @relation("employee_service_history_events")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([ownerId])
+  @@unique([ownerId, normalizedFullName])
+  @@map("employees")
+}
+
+model ServiceAssignment {
+  id           String          @id @default(uuid())
+  ownerId      String
+  owner        User            @relation("user_service_assignments", fields: [ownerId], references: [id], onDelete: Cascade)
+  module       HardwareSystemCode
+  deviceId     String
+  device       Device          @relation("device_service_assignments", fields: [deviceId], references: [id], onDelete: Restrict)
+  identifierId String          @unique
+  identifier   Identifier      @relation("identifier_service_assignment", fields: [identifierId], references: [id], onDelete: Restrict)
+  employeeId   String
+  employee     Employee        @relation("employee_service_assignments", fields: [employeeId], references: [id], onDelete: Restrict)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([ownerId, module])
+  @@index([ownerId, employeeId])
+  @@index([deviceId])
+  @@index([employeeId])
+  @@map("service_assignments")
+}
+
+model ServiceHistoryEvent {
+  id             String           @id @default(uuid())
+  ownerId        String
+  owner          User             @relation("user_service_history_events", fields: [ownerId], references: [id], onDelete: Cascade)
+  module         HardwareSystemCode
+  deviceId       String
+  device         Device           @relation("device_service_history_events", fields: [deviceId], references: [id], onDelete: Restrict)
+  identifierId   String?
+  identifier     Identifier?      @relation("identifier_service_history_events", fields: [identifierId], references: [id], onDelete: SetNull)
+  employeeId     String?
+  employee       Employee?        @relation("employee_service_history_events", fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeName   String
+  identifierCode String
+  deviceName     String
+  action         String
+  occurredAt     DateTime         @default(now())
+  createdAt      DateTime         @default(now())
+
+  @@index([ownerId, module, occurredAt])
+  @@index([deviceId, occurredAt])
+  @@index([ownerId, occurredAt])
+  @@map("service_history_events")
+}
+
+model FeedbackEvent {
+  id        String           @id @default(uuid())
+  ownerId   String
+  owner     User             @relation("user_feedback_events", fields: [ownerId], references: [id], onDelete: Cascade)
+  deviceId  String
+  device    Device           @relation("device_feedback_events", fields: [deviceId], references: [id], onDelete: Restrict)
+  sentiment FeedbackSentiment
+  source    FeedbackSource   @default(BUTTON)
+  comment   String?
+  createdAt DateTime         @default(now())
+
+  @@index([ownerId, deviceId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([ownerId, createdAt])
+  @@map("feedback_events")
 }
 
 model Order {
@@ -437,7 +507,10 @@ model WebhookEndpoint {
   id              String   @id @default(uuid())
   name            String
   url             String
-  secret          String?
+  secretEncrypted String?
+  secretIv        String?
+  secretTag       String?
+  secretHash      String?
   events          Json
   isActive        Boolean  @default(true)
   tenantId        String?

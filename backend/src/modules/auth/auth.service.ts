@@ -694,6 +694,7 @@ export class AuthService {
     const payload: AccessTokenPayload = {
       userId: user.id,
       email: user.email,
+      tenantId: user.tenantId,
       isTwoFactorAuthenticated: false,
     };
 
@@ -721,6 +722,7 @@ export class AuthService {
     const accessPayload: AccessTokenPayload = {
       userId: user.id,
       email: user.email,
+      tenantId: user.tenantId,
       isTwoFactorAuthenticated: true,
     };
 
@@ -892,7 +894,7 @@ export class AuthService {
         secret: this.accessSecret,
       });
 
-      if (!payload.userId || !payload.email) {
+      if (!payload.userId || !payload.email || !payload.tenantId) {
         throw new UnauthorizedException('Invalid authentication credentials.');
       }
 

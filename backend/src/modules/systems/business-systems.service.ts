@@ -9,13 +9,30 @@ import { CreateBusinessSystemDto } from './dto/create-business-system.dto';
 import { UpdateBusinessSystemPricingDto } from './dto/update-business-system-pricing.dto';
 import { BusinessSystemsRepository } from './repositories/business-systems.repository';
 
+function getExpectedIdentifierType(code: HardwareSystemCode): IdentifierType | null {
+  switch (code) {
+    case HardwareSystemCode.RFID_PRESENCE:
+      return 'BADGE';
+    case HardwareSystemCode.RFID_PORTE:
+      return 'SERRURE';
+    case HardwareSystemCode.BIOMETRIE:
+      return 'EMPREINTE';
+    case HardwareSystemCode.FEEDBACK:
+      return null;
+    default:
+      return null;
+  }
+}
+
 function sanitizeIdentifiersConfiguration(params: {
   code: HardwareSystemCode;
   hasIdentifiers: boolean;
   identifiersPerDevice: number;
   identifierType?: IdentifierType | null;
 }): { hasIdentifiers: boolean; identifiersPerDevice: number; identifierType: IdentifierType | null } {
-  if (params.code === HardwareSystemCode.FEEDBACK) {
+  const expectedIdentifierType = getExpectedIdentifierType(params.code);
+
+  if (!expectedIdentifierType) {
     if (params.hasIdentifiers || params.identifiersPerDevice > 0 || params.identifierType) {
       throw new BadRequestException(
         'Le systeme FEEDBACK ne supporte aucune extension. Utilisez hasIdentifiers=false, identifiersPerDevice=0 et identifierType=null.',
@@ -30,25 +47,24 @@ function sanitizeIdentifiersConfiguration(params: {
   }
 
   if (!params.hasIdentifiers) {
-    return {
-      hasIdentifiers: false,
-      identifiersPerDevice: 0,
-      identifierType: null,
-    };
-  }
-
-  if (!params.identifierType) {
-    throw new BadRequestException('identifierType est obligatoire quand hasIdentifiers=true.');
+    throw new BadRequestException(`Le systeme ${params.code} doit activer hasIdentifiers=true.`);
   }
 
   if (!Number.isInteger(params.identifiersPerDevice) || params.identifiersPerDevice <= 0) {
     throw new BadRequestException('identifiersPerDevice doit etre un entier strictement positif.');
   }
 
+  const resolvedIdentifierType = params.identifierType ?? expectedIdentifierType;
+  if (resolvedIdentifierType !== expectedIdentifierType) {
+    throw new BadRequestException(
+      `Type incompatible pour ${params.code}. Type attendu: ${expectedIdentifierType}.`,
+    );
+  }
+
   return {
     hasIdentifiers: true,
     identifiersPerDevice: params.identifiersPerDevice,
-    identifierType: params.identifierType,
+    identifierType: resolvedIdentifierType,
   };
 }
 

@@ -36,16 +36,21 @@ export class RolesGuard implements CanActivate {
     const dbUser = await this.prisma.user.findUnique({
       where: { id: user.userId },
       select: {
+        tenantId: true,
         role: {
           select: {
             name: true,
+            tenantId: true,
           },
         },
       },
     });
 
     const roleName = dbUser?.role?.name;
-    if (!roleName || !requiredRoles.includes(roleName)) {
+    const tenantMismatch =
+      !dbUser || dbUser.tenantId !== user.tenantId || dbUser.role?.tenantId !== user.tenantId;
+
+    if (!roleName || !requiredRoles.includes(roleName) || tenantMismatch) {
       throw new ForbiddenException('Insufficient role permissions.');
     }
 

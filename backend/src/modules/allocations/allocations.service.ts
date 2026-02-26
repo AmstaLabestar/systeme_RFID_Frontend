@@ -66,6 +66,7 @@ export class AllocationsService implements OnModuleInit, OnModuleDestroy {
   private readonly idempotencyKeyRegex = /^[A-Za-z0-9:_-]{8,120}$/;
   private readonly reservationTtlMs: number;
   private readonly reservationCleanupIntervalMs: number;
+  private readonly publicFeedbackBaseUrl: string | null;
   private reservationCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -81,6 +82,9 @@ export class AllocationsService implements OnModuleInit, OnModuleDestroy {
     );
     this.reservationCleanupIntervalMs = Number(
       this.configService.get('ALLOCATION_RESERVATION_CLEANUP_INTERVAL_MS') ?? 60000,
+    );
+    this.publicFeedbackBaseUrl = this.resolvePublicFeedbackBaseUrl(
+      this.configService.get<string>('DASHBOARD_REDIRECT_URL'),
     );
   }
 
@@ -168,10 +172,20 @@ export class AllocationsService implements OnModuleInit, OnModuleDestroy {
           const allocatedDeviceIds: string[] = [];
           const allocatedIdentifierIds: string[] = [];
           const ledgerEntries: Parameters<StockLedgerService['append']>[0] = [];
+          const requiredIdentifiersPerDevice =
+            supportsIdentifiers && system.identifiersPerDevice > 0 ? system.identifiersPerDevice : 0;
 
           if (input.targetType === OrderTargetType.DEVICE) {
             // Business invariant: purchase never creates hardware, it only allocates pre-provisioned stock.
-            const lockedDevices = await this.lockDeviceRows(tx, system.id, input.quantity);
+            const lockedDevices =
+              requiredIdentifiersPerDevice > 0
+                ? await this.lockDeviceRowsWithCompleteBundle(
+                    tx,
+                    system.id,
+                    input.quantity,
+                    requiredIdentifiersPerDevice,
+                  )
+                : await this.lockDeviceRows(tx, system.id, input.quantity);
             if (lockedDevices.length < input.quantity) {
               throw new BadRequestException('Stock de boitiers insuffisant pour cet achat.');
             }
@@ -230,17 +244,15 @@ export class AllocationsService implements OnModuleInit, OnModuleDestroy {
                 toStatus: DeviceStatus.ASSIGNED,
               });
 
-              if (supportsIdentifiers && system.identifiersPerDevice > 0) {
+              if (requiredIdentifiersPerDevice > 0) {
                 const bundledIdentifiers = await this.lockBundledIdentifierRows(
                   tx,
                   lockedDevice.id,
-                  system.identifiersPerDevice,
+                  requiredIdentifiersPerDevice,
                 );
 
-                if (bundledIdentifiers.length < system.identifiersPerDevice) {
-                  throw new ConflictException(
-                    `Boitier ${lockedDevice.id} sans lot complet d identifiants en stock.`,
-                  );
+                if (bundledIdentifiers.length < requiredIdentifiersPerDevice) {
+                  throw new BadRequestException('Stock de boitiers insuffisant pour cet achat.');
                 }
 
                 await this.reserveIdentifiers(tx, bundledIdentifiers);
@@ -613,6 +625,36 @@ export class AllocationsService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  private async lockDeviceRowsWithCompleteBundle(
+    tx: Prisma.TransactionClient,
+    systemId: string,
+    quantity: number,
+    requiredIdentifiersPerDevice: number,
+  ): Promise<LockedDeviceRow[]> {
+    const rows = await tx.$queryRaw<Array<{ id: string; warehouseCode: string }>>(Prisma.sql`
+      SELECT d.id, d."warehouseCode"
+      FROM "devices" d
+      WHERE d."systemId" = ${systemId}
+        AND d.status = CAST(${DeviceStatus.IN_STOCK} AS "DeviceStatus")
+        AND d."ownerId" IS NULL
+        AND (
+          SELECT COUNT(*)
+          FROM "identifiers" i
+          WHERE i."deviceId" = d.id
+            AND i.status = CAST(${IdentifierStatus.IN_STOCK} AS "IdentifierStatus")
+            AND i."ownerId" IS NULL
+        ) >= ${requiredIdentifiersPerDevice}
+      ORDER BY d."createdAt" ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT ${quantity}
+    `);
+
+    return rows.map((row) => ({
+      id: row.id,
+      warehouseCode: row.warehouseCode ?? 'MAIN',
+    }));
+  }
+
   private async lockBundledIdentifierRows(
     tx: Prisma.TransactionClient,
     deviceId: string,
@@ -774,8 +816,25 @@ export class AllocationsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    const dataUrl = await qrCode.toDataURL(`/public/feedback/${token}`);
+    const feedbackPath = `/feedback/${token}`;
+    const feedbackUrl = this.publicFeedbackBaseUrl
+      ? `${this.publicFeedbackBaseUrl}${feedbackPath}`
+      : feedbackPath;
+    const dataUrl = await qrCode.toDataURL(feedbackUrl);
     return { token, dataUrl };
+  }
+
+  private resolvePublicFeedbackBaseUrl(dashboardRedirectUrl?: string): string | null {
+    if (!dashboardRedirectUrl) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(dashboardRedirectUrl);
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      return null;
+    }
   }
 
   private normalizeIdempotencyKey(rawValue?: string): string | undefined {

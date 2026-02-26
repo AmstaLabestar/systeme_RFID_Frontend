@@ -5,30 +5,34 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DeviceStatus, HardwareSystemCode } from '@prisma/client';
+import { DeviceStatus, FeedbackSentiment, FeedbackSource, HardwareSystemCode } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import {
-  QR_FEEDBACK_COMMENT_MAX_LENGTH,
-  QR_FEEDBACK_COOLDOWN_MS,
-} from '../systems/domain/system-state.constants';
-import {
-  createId,
-  getLatestQrFeedbackTimestamp,
-  toFeedbackSentimentFromPublicValue,
-} from '../systems/domain/system-state.utils';
-import { SystemsStateService } from '../systems/systems-state.service';
 import { SubmitPublicFeedbackDto } from './dto/submit-public-feedback.dto';
+
+const QR_FEEDBACK_COOLDOWN_MS = 2 * 60 * 1000;
+const QR_FEEDBACK_COMMENT_MAX_LENGTH = 280;
+
+function toFeedbackSentiment(value: string): FeedbackSentiment | null {
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'NEGATIVE') {
+    return FeedbackSentiment.NEGATIVE;
+  }
+  if (normalized === 'NEUTRAL') {
+    return FeedbackSentiment.NEUTRAL;
+  }
+  if (normalized === 'POSITIVE') {
+    return FeedbackSentiment.POSITIVE;
+  }
+  return null;
+}
 
 @Injectable()
 export class PublicFeedbackService {
-  constructor(
-    private readonly systemsStateService: SystemsStateService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async submitByQrToken(qrToken: string, dto: SubmitPublicFeedbackDto) {
     const normalizedQrToken = qrToken.trim();
-    const sentiment = toFeedbackSentimentFromPublicValue(dto.value);
+    const sentiment = toFeedbackSentiment(dto.value);
 
     if (!normalizedQrToken || !sentiment) {
       throw new BadRequestException(
@@ -47,7 +51,7 @@ export class PublicFeedbackService {
       comment = sanitizedComment.length > 0 ? sanitizedComment : undefined;
     }
 
-    const dbFeedbackDevice = await this.prisma.device.findFirst({
+    const feedbackDevice = await this.prisma.device.findFirst({
       where: {
         qrCodeToken: normalizedQrToken,
         status: DeviceStatus.ASSIGNED,
@@ -65,31 +69,36 @@ export class PublicFeedbackService {
       },
     });
 
-    const fallbackDevice = dbFeedbackDevice
-      ? null
-      : await this.systemsStateService.findFeedbackDeviceByQrToken(normalizedQrToken);
-
-    if (!dbFeedbackDevice && !fallbackDevice) {
+    if (!feedbackDevice) {
       throw new NotFoundException('Lien QR invalide ou introuvable.');
     }
 
-    if (dbFeedbackDevice && !dbFeedbackDevice.isConfigured) {
+    if (!feedbackDevice.isConfigured) {
       throw new BadRequestException('Ce boitier feedback n est pas actif.');
     }
 
-    if (fallbackDevice && !fallbackDevice.device.configured) {
-      throw new BadRequestException('Ce boitier feedback n est pas actif.');
-    }
-
-    const targetUserId = dbFeedbackDevice?.ownerId ?? fallbackDevice?.userId;
-    const targetDeviceId = dbFeedbackDevice?.id ?? fallbackDevice?.device.id;
+    const targetUserId = feedbackDevice.ownerId;
+    const targetDeviceId = feedbackDevice.id;
 
     if (!targetUserId || !targetDeviceId) {
       throw new NotFoundException('Lien QR invalide ou introuvable.');
     }
 
-    const servicesState = await this.systemsStateService.getServicesState(targetUserId);
-    const latestQrTimestamp = getLatestQrFeedbackTimestamp(servicesState, targetDeviceId);
+    const latestQrFeedback = await this.prisma.feedbackEvent.findFirst({
+      where: {
+        ownerId: targetUserId,
+        deviceId: targetDeviceId,
+        source: FeedbackSource.QR,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      select: {
+        createdAt: true,
+      },
+    });
+
+    const latestQrTimestamp = latestQrFeedback?.createdAt.getTime() ?? 0;
     const now = Date.now();
 
     if (latestQrTimestamp > 0 && now - latestQrTimestamp < QR_FEEDBACK_COOLDOWN_MS) {
@@ -100,18 +109,15 @@ export class PublicFeedbackService {
       );
     }
 
-    const feedbackRecord = {
-      id: createId('fb'),
-      deviceId: targetDeviceId,
-      module: 'feedback' as const,
-      sentiment,
-      source: 'QR' as const,
-      comment,
-      createdAt: new Date(now).toISOString(),
-    };
-
-    servicesState.feedbackRecords = [feedbackRecord, ...servicesState.feedbackRecords];
-    await this.systemsStateService.saveServicesState(targetUserId, servicesState);
+    await this.prisma.feedbackEvent.create({
+      data: {
+        ownerId: targetUserId,
+        deviceId: targetDeviceId,
+        sentiment,
+        source: FeedbackSource.QR,
+        comment,
+      },
+    });
 
     return {
       success: true,

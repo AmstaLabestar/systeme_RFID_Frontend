@@ -160,6 +160,7 @@ describe('Marketplace allocation e2e', () => {
       {
         userId: adminUser.id,
         email: adminUser.email,
+        tenantId: adminUser.tenantId,
         isTwoFactorAuthenticated: true,
       },
       {
@@ -172,6 +173,7 @@ describe('Marketplace allocation e2e', () => {
       {
         userId: clientUser.id,
         email: clientUser.email,
+        tenantId: clientUser.tenantId,
         isTwoFactorAuthenticated: true,
       },
       {
@@ -292,9 +294,11 @@ describe('Marketplace allocation e2e', () => {
 
   it('imports stock via admin, allocates existing hardware, and exposes it in /devices/my', async () => {
     createdMacAddress = createRandomMacAddress();
-    createdIdentifierCodes = Array.from({ length: 5 }).map(
-      (_, index) => `E2E-BADGE-${randomUUID().slice(0, 8).toUpperCase()}-${index + 1}`,
-    );
+    const generatedIdentifierMacs = new Set<string>();
+    while (generatedIdentifierMacs.size < 5) {
+      generatedIdentifierMacs.add(createRandomMacAddress());
+    }
+    createdIdentifierCodes = Array.from(generatedIdentifierMacs);
 
     const validationResponse = await request(app.getHttpServer())
       .post(`/admin/systems/${targetSystem.id}/devices/import/validate`)
@@ -400,5 +404,38 @@ describe('Marketplace allocation e2e', () => {
     expect(allocatedDevice).toBeDefined();
     expect(allocatedDevice?.macAddress).toBe(createdMacAddress);
     expect(allocatedDevice?.identifiers.length).toBe(5);
+
+    const configureResponse = await request(app.getHttpServer())
+      .patch(`/devices/${createdDeviceId}/configure`)
+      .set('Authorization', `Bearer ${clientAccessToken}`)
+      .send({
+        location: 'Reception',
+        systemIdentifier: createdMacAddress,
+      })
+      .expect(200);
+
+    expect(configureResponse.body.isConfigured).toBe(true);
+    expect(configureResponse.body.configuredName).toBeNull();
+  });
+
+  it('accepts alphanumeric extensions during import validation', async () => {
+    const validationResponse = await request(app.getHttpServer())
+      .post(`/admin/systems/${targetSystem.id}/devices/import/validate`)
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({
+        warehouseCode: 'E2E',
+        devices: [
+          {
+            macAddress: createRandomMacAddress(),
+            identifiers: ['BADGE-001', 'BADGE-002', 'BADGE-003', 'BADGE-004', 'BADGE-005'],
+            warehouseCode: 'E2E',
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(validationResponse.body.canCommit).toBe(true);
+    expect(validationResponse.body.summary.invalidRows).toBe(0);
+    expect(validationResponse.body.rows[0].issues).toHaveLength(0);
   });
 });

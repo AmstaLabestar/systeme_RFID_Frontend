@@ -199,7 +199,7 @@ export function FeedbackPage() {
 
   const handleConfigureDevice = async (
     deviceId: string,
-    values: { name: string; location: string; systemIdentifier: string },
+    values: { name?: string; location: string; systemIdentifier: string },
   ): Promise<boolean> => {
     try {
       await configureDevice(deviceId, values);

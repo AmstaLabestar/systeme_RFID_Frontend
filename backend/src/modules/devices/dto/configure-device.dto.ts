@@ -1,13 +1,16 @@
 import { Transform } from 'class-transformer';
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { sanitizeString } from '../../../common/utils/security.util';
 
 export class ConfigureDeviceDto {
-  @Transform(({ value }) => sanitizeString(String(value)))
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null ? undefined : sanitizeString(String(value)),
+  )
   @IsString()
   @MinLength(2)
   @MaxLength(120)
-  name!: string;
+  name?: string;
 
   @Transform(({ value }) => sanitizeString(String(value)))
   @IsString()

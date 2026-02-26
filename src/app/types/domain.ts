@@ -138,7 +138,7 @@ export interface DashboardNavItem {
 }
 
 export interface DeviceConfigurationInput {
-  name: string;
+  name?: string;
   location: string;
   systemIdentifier: string;
 }

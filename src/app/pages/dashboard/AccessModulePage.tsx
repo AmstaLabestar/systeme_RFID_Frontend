@@ -38,7 +38,6 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     inventory,
     configureDevice,
     getDevicesByModule,
-    getAvailableIdentifiersByModule,
     getInventoryById,
   } = useMarketplace();
   const {
@@ -60,7 +59,6 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   const pendingDevices = moduleDevices.filter((device) => !device.configured);
   const configuredDevices = moduleDevices.filter((device) => device.configured);
 
-  const availableIdentifiers = getAvailableIdentifiersByModule(module);
   const moduleAssignments = getAssignmentsByModule(module);
   const moduleHistory = getHistoryByModule(module).slice(0, 25);
 
@@ -88,37 +86,102 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<AssignmentFormValues>();
+  const selectedAssignmentDeviceId = watch('deviceId');
+  const selectedAssignmentIdentifierId = watch('identifierId');
 
   useEffect(() => {
     if (!configuredDevices.length) {
       return;
     }
 
+    if (
+      selectedAssignmentDeviceId &&
+      configuredDevices.some((device) => device.id === selectedAssignmentDeviceId)
+    ) {
+      return;
+    }
+
     setValue('deviceId', configuredDevices[0].id);
-  }, [configuredDevices, setValue]);
+  }, [configuredDevices, selectedAssignmentDeviceId, setValue]);
 
   const editingAssignment = useMemo(
     () => moduleAssignments.find((assignment) => assignment.id === editingAssignmentId),
     [moduleAssignments, editingAssignmentId],
   );
 
+  const identifiersForSelectedDevice = useMemo(
+    () => {
+      if (!selectedAssignmentDeviceId) {
+        return [];
+      }
+
+      const deviceIdentifiers = inventory.filter(
+        (identifier) =>
+          identifier.module === module &&
+          identifier.deviceId === selectedAssignmentDeviceId,
+      );
+      const extraAvailableIdentifiers = inventory.filter(
+        (identifier) =>
+          identifier.module === module &&
+          !identifier.deviceId &&
+          identifier.status === 'available',
+      );
+
+      const merged = [...deviceIdentifiers, ...extraAvailableIdentifiers];
+      const dedupMap = new Map(merged.map((identifier) => [identifier.id, identifier]));
+      return Array.from(dedupMap.values());
+    },
+    [inventory, module, selectedAssignmentDeviceId],
+  );
+
+  const availableMarketplaceExtensionsCount = useMemo(
+    () =>
+      inventory.filter(
+        (identifier) =>
+          identifier.module === module &&
+          !identifier.deviceId &&
+          identifier.status === 'available',
+      ).length,
+    [inventory, module],
+  );
+
   const identifierOptions = useMemo(() => {
     if (!editingAssignment) {
-      return availableIdentifiers;
+      return identifiersForSelectedDevice;
     }
 
     const currentIdentifier = getInventoryById(editingAssignment.identifierId);
 
     if (!currentIdentifier) {
-      return availableIdentifiers;
+      return identifiersForSelectedDevice;
     }
 
-    const merged = [currentIdentifier, ...availableIdentifiers];
+    const merged = [currentIdentifier, ...identifiersForSelectedDevice];
     const dedupMap = new Map(merged.map((identifier) => [identifier.id, identifier]));
     return Array.from(dedupMap.values());
-  }, [editingAssignment, availableIdentifiers, getInventoryById]);
+  }, [editingAssignment, getInventoryById, identifiersForSelectedDevice]);
+
+  useEffect(() => {
+    if (editingAssignmentId) {
+      return;
+    }
+
+    if (!selectedAssignmentIdentifierId) {
+      return;
+    }
+
+    const stillSelectable = identifierOptions.some(
+      (identifier) =>
+        identifier.id === selectedAssignmentIdentifierId &&
+        identifier.status === 'available',
+    );
+    if (!stillSelectable) {
+      setValue('identifierId', '');
+    }
+  }, [editingAssignmentId, identifierOptions, selectedAssignmentIdentifierId, setValue]);
 
   useEffect(() => {
     if (!editingAssignment) {
@@ -138,7 +201,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
   const handleConfigureDevice = async (
     deviceId: string,
-    values: { name: string; location: string; systemIdentifier: string },
+    values: { name?: string; location: string; systemIdentifier: string },
   ): Promise<boolean> => {
     try {
       await configureDevice(deviceId, values);
@@ -153,6 +216,14 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
   const onSubmit = async (values: AssignmentFormValues) => {
     try {
       if (!editingAssignmentId) {
+        const selectedIdentifier = identifierOptions.find(
+          (identifier) => identifier.id === values.identifierId,
+        );
+        if (!selectedIdentifier || selectedIdentifier.status !== 'available') {
+          toast.error(t('access.form.noIdentifierAvailable'));
+          return;
+        }
+
         await assignIdentifier({
           module,
           deviceId: values.deviceId,
@@ -396,18 +467,72 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
                 <label className="form-control">
                   <span className="label-text text-xs text-[var(--text-secondary)]">{t('table.identifier')}</span>
-                  <select
-                    className="select select-bordered mt-1 bg-[var(--surface-muted)]"
-                    disabled={Boolean(editingAssignmentId)}
+                  <input
+                    type="hidden"
                     {...register('identifierId', { required: t('access.form.identifierRequired') })}
-                  >
-                    <option value="">{t('form.select')}</option>
-                    {identifierOptions.map((identifier) => (
-                      <option key={identifier.id} value={identifier.id}>
-                        {identifier.code}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  {editingAssignmentId ? (
+                    <div className="mt-1 rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-3">
+                      <p className="font-mono text-xs text-[var(--accent-primary)]">
+                        {identifierOptions.find((identifier) => identifier.id === selectedAssignmentIdentifierId)
+                          ?.code ?? t('marketplace.stock.na')}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-1 max-h-44 space-y-2 overflow-y-auto rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-2">
+                      {!selectedAssignmentDeviceId ? (
+                        <p className="text-xs text-[var(--text-secondary)]">{t('access.form.deviceRequired')}</p>
+                      ) : identifierOptions.length === 0 ? (
+                        <p className="text-xs text-[var(--text-secondary)]">{t('access.form.noIdentifierAvailable')}</p>
+                      ) : (
+                        identifierOptions.map((identifier) => {
+                          const isAssigned = identifier.status === 'assigned';
+                          const isSelected = selectedAssignmentIdentifierId === identifier.id;
+
+                          return (
+                            <button
+                              key={identifier.id}
+                              type="button"
+                              className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition ${
+                                isAssigned
+                                  ? 'border-[var(--success-main)]/40 bg-[var(--success-main)]/10 text-[var(--success-main)]'
+                                  : isSelected
+                                    ? 'border-[var(--accent-primary)] bg-[var(--card-bg)] text-[var(--text-primary)]'
+                                    : 'border-[var(--border-soft)] bg-[var(--card-bg)] text-[var(--text-primary)]'
+                              }`}
+                              disabled={isAssigned}
+                              onClick={() =>
+                                setValue('identifierId', identifier.id, { shouldDirty: true, shouldValidate: true })
+                              }
+                            >
+                              <span className="font-mono text-xs">{identifier.code}</span>
+                              <div className="flex items-center gap-1">
+                                <span className={`badge badge-xs ${isAssigned ? 'badge-success' : 'badge-outline'}`}>
+                                  {isAssigned ? 'Associe' : 'Disponible'}
+                                </span>
+                                <span
+                                  className={`badge badge-xs ${
+                                    identifier.deviceId ? 'badge-ghost' : 'badge-info badge-outline'
+                                  }`}
+                                >
+                                  {identifier.deviceId
+                                    ? t('access.form.identifierSource.bound')
+                                    : t('access.form.identifierSource.pool')}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                  {!editingAssignmentId && selectedAssignmentDeviceId && availableMarketplaceExtensionsCount > 0 ? (
+                    <span className="mt-1 text-xs text-[var(--info-main)]">
+                      {t('access.form.marketplacePoolHint', {
+                        count: availableMarketplaceExtensionsCount,
+                      })}
+                    </span>
+                  ) : null}
                   {errors.identifierId ? (
                     <span className="mt-1 text-xs text-[var(--error-main)]">{errors.identifierId.message}</span>
                   ) : null}

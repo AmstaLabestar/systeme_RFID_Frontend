@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
+import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { RolesRepository } from '../roles/repositories/roles.repository';
@@ -30,7 +31,11 @@ export class UsersService {
     this.bcryptSaltRounds = this.configService.getOrThrow<number>('BCRYPT_SALT_ROUNDS');
   }
 
-  async createUser(dto: CreateUserDto) {
+  async createUser(actor: AccessTokenPayload, dto: CreateUserDto) {
+    if (dto.tenantId !== actor.tenantId) {
+      throw new BadRequestException('Cross-tenant user creation is forbidden.');
+    }
+
     const [existingByEmail, existingByPhone, tenant, role] = await Promise.all([
       this.usersRepository.findAuthByEmail(dto.email),
       dto.phoneNumber ? this.usersRepository.findAuthByPhoneNumber(dto.phoneNumber) : null,
@@ -74,11 +79,11 @@ export class UsersService {
     return this.toUserResponse(createdUser);
   }
 
-  async listUsers(query: ListUsersQueryDto) {
+  async listUsers(actor: AccessTokenPayload, query: ListUsersQueryDto) {
     const { data, total } = await this.usersRepository.paginate(
       query.skip,
       query.limit,
-      query.tenantId,
+      actor.tenantId,
     );
 
     return {
@@ -92,9 +97,9 @@ export class UsersService {
     };
   }
 
-  async getUserById(id: string) {
+  async getUserById(actor: AccessTokenPayload, id: string) {
     const user = await this.usersRepository.findPublicById(id);
-    if (!user) {
+    if (!user || user.tenant.id !== actor.tenantId) {
       throw new NotFoundException('User not found.');
     }
     return this.toUserResponse(user);

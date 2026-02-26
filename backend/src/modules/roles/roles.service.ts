@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { ListRolesQueryDto } from './dto/list-roles-query.dto';
 import { RolesRepository } from './repositories/roles.repository';
@@ -11,7 +12,11 @@ export class RolesService {
     private readonly tenantsRepository: TenantsRepository,
   ) {}
 
-  async createRole(dto: CreateRoleDto) {
+  async createRole(actor: AccessTokenPayload, dto: CreateRoleDto) {
+    if (dto.tenantId !== actor.tenantId) {
+      throw new ConflictException('Cross-tenant role creation is forbidden.');
+    }
+
     const tenant = await this.tenantsRepository.findById(dto.tenantId);
     if (!tenant) {
       throw new NotFoundException('Tenant not found.');
@@ -31,11 +36,11 @@ export class RolesService {
     });
   }
 
-  async listRoles(query: ListRolesQueryDto) {
+  async listRoles(actor: AccessTokenPayload, query: ListRolesQueryDto) {
     const { data, total } = await this.rolesRepository.paginate(
       query.skip,
       query.limit,
-      query.tenantId,
+      actor.tenantId,
     );
 
     return {
@@ -49,9 +54,9 @@ export class RolesService {
     };
   }
 
-  async getRoleById(id: string) {
+  async getRoleById(actor: AccessTokenPayload, id: string) {
     const role = await this.rolesRepository.findById(id);
-    if (!role) {
+    if (!role || role.tenantId !== actor.tenantId) {
       throw new NotFoundException('Role not found.');
     }
     return role;

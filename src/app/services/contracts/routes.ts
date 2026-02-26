@@ -44,11 +44,6 @@ export const SERVICES_ROUTES = {
   reassignAssignment: (assignmentId: string) => `/services/assignments/${assignmentId}/reassign`,
 } as const;
 
-export const SYSTEM_ROUTES = {
-  marketplaceState: '/systems/marketplace-state',
-  servicesState: '/systems/services-state',
-} as const;
-
 export const PUBLIC_ROUTES = {
   feedbackByQrToken: (qrToken: string) => `/public/feedback/${encodeURIComponent(qrToken)}`,
 } as const;

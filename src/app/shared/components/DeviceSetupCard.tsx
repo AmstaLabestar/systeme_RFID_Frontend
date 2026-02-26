@@ -14,7 +14,7 @@ interface DeviceSetupCardProps {
 const MAC_INPUT_REGEX = /^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$/;
 
 function normalizeMacAddress(value: string): string {
-  return value.trim().toUpperCase().replaceAll('-', ':');
+  return value.trim().toUpperCase().replace(/-/g, ':');
 }
 
 export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
@@ -28,7 +28,7 @@ export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
     reset,
   } = useForm<DeviceSetupFormValues>({
     defaultValues: {
-      name: device.name,
+      name: '',
       location: device.location === 'A configurer' ? '' : device.location,
       systemIdentifier: device.provisionedMacAddress,
     },
@@ -89,12 +89,15 @@ export function DeviceSetupCard({ device, onConfigure }: DeviceSetupCardProps) {
               <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
                 <label className="form-control">
                   <span className="label-text text-xs text-[var(--text-secondary)]">
-                    {t('deviceSetup.form.deviceName')}
+                    {t('deviceSetup.form.deviceName')} (optionnel)
                   </span>
                   <input
                     className="input input-bordered mt-1 bg-[var(--surface-muted)]"
                     placeholder={t('deviceSetup.form.deviceNamePlaceholder')}
-                    {...register('name', { required: t('deviceSetup.form.deviceNameRequired') })}
+                    {...register('name', {
+                      validate: (value) =>
+                        !value || value.trim().length >= 2 || t('deviceSetup.form.deviceNameRequired'),
+                    })}
                   />
                   {errors.name ? (
                     <span className="mt-1 text-xs text-[var(--error-main)]">{errors.name.message}</span>
