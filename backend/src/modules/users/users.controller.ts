@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
+import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UsersService } from './users.service';
@@ -14,17 +16,17 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.createUser(dto);
+  create(@CurrentUser() user: AccessTokenPayload, @Body() dto: CreateUserDto) {
+    return this.usersService.createUser(user, dto);
   }
 
   @Get()
-  list(@Query() query: ListUsersQueryDto) {
-    return this.usersService.listUsers(query);
+  list(@CurrentUser() user: AccessTokenPayload, @Query() query: ListUsersQueryDto) {
+    return this.usersService.listUsers(user, query);
   }
 
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return this.usersService.getUserById(id);
+  getById(@CurrentUser() user: AccessTokenPayload, @Param('id') id: string) {
+    return this.usersService.getUserById(user, id);
   }
 }

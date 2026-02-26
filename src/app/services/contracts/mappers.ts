@@ -282,6 +282,7 @@ function toInventoryIdentifier(value: unknown): InventoryIdentifier | null {
   const systemSource = asRecord(source.system);
   const deviceSource = asRecord(source.device);
   const deviceSystem = asRecord(deviceSource.system);
+  const serviceAssignmentSource = asRecord(source.serviceAssignment);
   const module = toModuleKey(
     pickFirstDefined(
       source.module,
@@ -302,17 +303,36 @@ function toInventoryIdentifier(value: unknown): InventoryIdentifier | null {
     return null;
   }
 
-  const normalizedStatus = asString(source.status).trim().toUpperCase();
-  const ownerId = asOptionalString(pickFirstDefined(source.ownerId, source.owner_id));
-  const employeeId = asOptionalString(pickFirstDefined(source.employeeId, source.employee_id));
+  const employeeId = asOptionalString(
+    pickFirstDefined(
+      source.employeeId,
+      source.employee_id,
+      serviceAssignmentSource.employeeId,
+      serviceAssignmentSource.employee_id,
+    ),
+  );
+  const normalizedStatus = asOptionalString(source.status)?.toLowerCase();
+  const explicitStatus: InventoryIdentifier['status'] | null =
+    normalizedStatus === 'available'
+      ? 'available'
+      : normalizedStatus === 'assigned' && employeeId
+        ? 'assigned'
+        : null;
 
   return {
     id,
     module,
     type,
     code: asString(pickFirstDefined(source.code, source.physicalIdentifier), id.toUpperCase()),
-    status: employeeId || (normalizedStatus === 'ASSIGNED' && !ownerId) ? 'assigned' : 'available',
-    deviceId: asOptionalString(pickFirstDefined(source.deviceId, source.device_id)),
+    status: explicitStatus ?? (employeeId ? 'assigned' : 'available'),
+    deviceId: asOptionalString(
+      pickFirstDefined(
+        source.deviceId,
+        source.device_id,
+        serviceAssignmentSource.deviceId,
+        serviceAssignmentSource.device_id,
+      ),
+    ),
     employeeId,
     acquiredAt: asString(
       pickFirstDefined(source.acquiredAt, source.acquired_at, source.createdAt, source.created_at),
@@ -638,9 +658,10 @@ export function toMarketplaceState(value: unknown): MarketplaceStatePayload {
     accumulator[productId] = asNullableNumber(stockValue);
     return accumulator;
   }, {});
+  const rawDevices = asArray(pickFirstDefined(source.devices, source.device_units));
 
   const devices = mapCollection(
-    pickFirstDefined(source.devices, source.device_units),
+    rawDevices,
     toDeviceUnit,
   );
 
@@ -653,15 +674,32 @@ export function toMarketplaceState(value: unknown): MarketplaceStatePayload {
     toInventoryIdentifier,
   );
   const inventoryFromDevices = devices.flatMap((device) => {
-    const rawDevice = asArray(pickFirstDefined(source.devices, source.device_units)).find((entry) => {
+    const rawDevice = rawDevices.find((entry) => {
       const record = asRecord(entry);
       return asOptionalString(record.id) === device.id;
     });
     const deviceRecord = asRecord(rawDevice);
-    return mapCollection(
-      pickFirstDefined(deviceRecord.identifiers, deviceRecord.inventory),
-      toInventoryIdentifier,
-    );
+    const rawIdentifiers = asArray(pickFirstDefined(deviceRecord.identifiers, deviceRecord.inventory));
+
+    return rawIdentifiers
+      .map((rawIdentifier) => {
+        const identifierRecord = asRecord(rawIdentifier);
+        return toInventoryIdentifier({
+          ...identifierRecord,
+          module: pickFirstDefined(
+            identifierRecord.module,
+            identifierRecord.module_key,
+            identifierRecord.moduleKey,
+            device.module,
+          ),
+          deviceId: pickFirstDefined(
+            identifierRecord.deviceId,
+            identifierRecord.device_id,
+            device.id,
+          ),
+        });
+      })
+      .filter((entry): entry is InventoryIdentifier => entry !== null);
   });
 
   const inventoryMap = new Map<string, InventoryIdentifier>();
@@ -779,81 +817,6 @@ export function toServiceMutationResponse(value: unknown): NormalizedServiceMuta
   };
 }
 
-function mapDeviceForApi(value: DeviceUnit): UnknownRecord {
-  return {
-    id: value.id,
-    module: value.module,
-    name: value.name,
-    location: value.location,
-    provisionedMacAddress: value.provisionedMacAddress,
-    qrToken: value.qrToken,
-    systemIdentifier: value.systemIdentifier,
-    configured: value.configured,
-    capacity: value.capacity,
-    createdAt: value.createdAt,
-    activatedAt: value.activatedAt,
-  };
-}
-
-function mapIdentifierForApi(value: InventoryIdentifier): UnknownRecord {
-  return {
-    id: value.id,
-    module: value.module,
-    type: value.type,
-    code: value.code,
-    status: value.status,
-    deviceId: value.deviceId,
-    employeeId: value.employeeId,
-    acquiredAt: value.acquiredAt,
-  };
-}
-
-function mapEmployeeForApi(value: Employee): UnknownRecord {
-  return {
-    id: value.id,
-    firstName: value.firstName,
-    lastName: value.lastName,
-    fullName: value.fullName,
-  };
-}
-
-function mapAssignmentForApi(value: ServiceAssignment): UnknownRecord {
-  return {
-    id: value.id,
-    module: value.module,
-    deviceId: value.deviceId,
-    identifierId: value.identifierId,
-    employeeId: value.employeeId,
-    createdAt: value.createdAt,
-    updatedAt: value.updatedAt,
-  };
-}
-
-function mapHistoryForApi(value: HistoryEvent): UnknownRecord {
-  return {
-    id: value.id,
-    module: value.module,
-    deviceId: value.deviceId,
-    employee: value.employee,
-    identifier: value.identifier,
-    device: value.device,
-    action: value.action,
-    occurredAt: value.occurredAt,
-  };
-}
-
-function mapFeedbackForApi(value: FeedbackRecord): UnknownRecord {
-  return {
-    id: value.id,
-    deviceId: value.deviceId,
-    module: value.module,
-    sentiment: value.sentiment,
-    source: value.source,
-    comment: value.comment,
-    createdAt: value.createdAt,
-  };
-}
-
 export function toSignInPayload(payload: {
   identifier: string;
   password: string;
@@ -942,11 +905,16 @@ export function toPurchasePayload(payload: { productId: string; quantity: number
 }
 
 export function toActivateDevicePayload(payload: DeviceConfigurationInput): UnknownRecord {
-  return {
-    name: payload.name,
+  const body: UnknownRecord = {
     location: payload.location,
     systemIdentifier: payload.systemIdentifier,
   };
+
+  if (payload.name && payload.name.trim().length > 0) {
+    body.name = payload.name;
+  }
+
+  return body;
 }
 
 export function toAssignIdentifierPayload(payload: AssignIdentifierInput): UnknownRecord {
@@ -965,22 +933,5 @@ export function toReassignIdentifierPayload(payload: ReassignIdentifierInput): U
     deviceId: payload.deviceId,
     firstName: payload.firstName,
     lastName: payload.lastName,
-  };
-}
-
-export function toMarketplaceStatePayloadForApi(payload: MarketplaceStatePayload): UnknownRecord {
-  return {
-    productStockById: { ...payload.productStockById },
-    devices: payload.devices.map(mapDeviceForApi),
-    inventory: payload.inventory.map(mapIdentifierForApi),
-  };
-}
-
-export function toServicesStatePayloadForApi(payload: ServicesStatePayload): UnknownRecord {
-  return {
-    employees: payload.employees.map(mapEmployeeForApi),
-    assignments: payload.assignments.map(mapAssignmentForApi),
-    history: payload.history.map(mapHistoryForApi),
-    feedbackRecords: payload.feedbackRecords.map(mapFeedbackForApi),
   };
 }

@@ -1,4 +1,11 @@
-import { Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   OutboxEventStatus,
@@ -8,6 +15,9 @@ import {
   type WebhookEndpoint,
 } from '@prisma/client';
 import { createHmac } from 'crypto';
+import { promises as dns } from 'dns';
+import { isIP } from 'net';
+import { decryptSecret, encryptSecret, hashToken } from '../../common/utils/security.util';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
 interface EnqueueOutboxEventInput {
@@ -22,12 +32,136 @@ interface EnqueueOutboxEventInput {
   availableAt?: Date;
 }
 
+const WEBHOOK_ENDPOINT_PUBLIC_SELECT = Prisma.validator<Prisma.WebhookEndpointSelect>()({
+  id: true,
+  name: true,
+  url: true,
+  events: true,
+  isActive: true,
+  tenantId: true,
+  failureCount: true,
+  lastDeliveredAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+function isLocalHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function isBlockedIpv4(address: string): boolean {
+  const parts = address.split('.').map((segment) => Number.parseInt(segment, 10));
+  if (parts.length !== 4 || parts.some((value) => Number.isNaN(value))) {
+    return true;
+  }
+
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127) {
+    return true;
+  }
+  if (a === 169 && b === 254) {
+    return true;
+  }
+  if (a === 172 && b >= 16 && b <= 31) {
+    return true;
+  }
+  if (a === 192 && b === 168) {
+    return true;
+  }
+  if (a >= 224) {
+    return true;
+  }
+
+  return false;
+}
+
+function isBlockedIpv6(address: string): boolean {
+  const normalized = address.toLowerCase();
+
+  if (normalized === '::' || normalized === '::1') {
+    return true;
+  }
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) {
+    return true;
+  }
+  if (normalized.startsWith('fe80:')) {
+    return true;
+  }
+  if (normalized.startsWith('::ffff:')) {
+    return isBlockedIpAddress(normalized.replace('::ffff:', ''));
+  }
+
+  return false;
+}
+
+function isBlockedIpAddress(address: string): boolean {
+  const normalized = address.trim().replace(/^\[|\]$/g, '');
+  const version = isIP(normalized);
+
+  if (version === 4) {
+    return isBlockedIpv4(normalized);
+  }
+  if (version === 6) {
+    return isBlockedIpv6(normalized);
+  }
+
+  return true;
+}
+
+async function assertWebhookUrlAllowed(rawUrl: string, nodeEnv: string): Promise<void> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    throw new BadRequestException('URL webhook invalide.');
+  }
+
+  const hostname = parsedUrl.hostname.trim().toLowerCase();
+  const isLocal = isLocalHostname(hostname);
+  const allowLocalHttp = nodeEnv !== 'production' && isLocal;
+
+  if (parsedUrl.protocol !== 'https:' && !(parsedUrl.protocol === 'http:' && allowLocalHttp)) {
+    throw new BadRequestException(
+      'URL webhook non autorisee. Utilisez HTTPS (HTTP localhost autorise hors production).',
+    );
+  }
+
+  if (isLocal) {
+    if (nodeEnv === 'production') {
+      throw new BadRequestException('Les cibles locales sont interdites en production.');
+    }
+    return;
+  }
+
+  if (isIP(hostname)) {
+    if (isBlockedIpAddress(hostname)) {
+      throw new BadRequestException('URL webhook non autorisee (hote prive ou reserve).');
+    }
+    return;
+  }
+
+  try {
+    const records = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (records.some((record) => isBlockedIpAddress(record.address))) {
+      throw new BadRequestException('URL webhook non autorisee (resolution vers IP privee/reservee).');
+    }
+  } catch (error) {
+    if (error instanceof BadRequestException) {
+      throw error;
+    }
+    throw new BadRequestException('Impossible de valider la cible webhook.');
+  }
+}
+
 @Injectable()
 export class OutboxService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboxService.name);
   private readonly dispatchIntervalMs: number;
   private readonly maxRetryAttempts: number;
   private readonly webhookTimeoutMs: number;
+  private readonly nodeEnv: string;
+  private readonly secretsEncryptionKey: string;
   private timer: NodeJS.Timeout | null = null;
   private dispatchInProgress = false;
 
@@ -40,6 +174,8 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     );
     this.maxRetryAttempts = Number(this.configService.get('OUTBOX_MAX_RETRY_ATTEMPTS') ?? 5);
     this.webhookTimeoutMs = Number(this.configService.get('OUTBOX_WEBHOOK_TIMEOUT_MS') ?? 5000);
+    this.nodeEnv = this.configService.get('NODE_ENV') ?? 'development';
+    this.secretsEncryptionKey = this.configService.getOrThrow<string>('TWO_FACTOR_ENCRYPTION_KEY');
   }
 
   onModuleInit(): void {
@@ -73,44 +209,75 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  listWebhookEndpoints() {
+  listWebhookEndpoints(tenantId: string) {
     return this.prisma.webhookEndpoint.findMany({
+      where: { tenantId },
       orderBy: { createdAt: 'desc' },
+      select: WEBHOOK_ENDPOINT_PUBLIC_SELECT,
     });
   }
 
-  createWebhookEndpoint(input: {
+  async createWebhookEndpoint(input: {
     name: string;
     url: string;
     events: OutboxEventType[];
-    tenantId?: string;
+    tenantId: string;
     secret?: string;
   }) {
+    await assertWebhookUrlAllowed(input.url, this.nodeEnv);
+
+    const encryptedSecret = input.secret
+      ? encryptSecret(input.secret, this.secretsEncryptionKey)
+      : null;
+
     return this.prisma.webhookEndpoint.create({
       data: {
         name: input.name,
         url: input.url,
         events: input.events as unknown as Prisma.InputJsonValue,
-        tenantId: input.tenantId ?? null,
-        secret: input.secret ?? null,
+        tenantId: input.tenantId,
+        secretEncrypted: encryptedSecret?.encrypted ?? null,
+        secretIv: encryptedSecret?.iv ?? null,
+        secretTag: encryptedSecret?.tag ?? null,
+        secretHash: encryptedSecret?.hash ?? null,
         isActive: true,
       },
+      select: WEBHOOK_ENDPOINT_PUBLIC_SELECT,
     });
   }
 
-  setWebhookActivation(webhookId: string, isActive: boolean) {
-    return this.prisma.webhookEndpoint.update({
-      where: { id: webhookId },
+  async setWebhookActivation(webhookId: string, tenantId: string, isActive: boolean) {
+    const updated = await this.prisma.webhookEndpoint.updateMany({
+      where: {
+        id: webhookId,
+        tenantId,
+      },
       data: { isActive },
+    });
+
+    if (updated.count === 0) {
+      throw new NotFoundException('Webhook introuvable.');
+    }
+
+    return this.prisma.webhookEndpoint.findFirst({
+      where: {
+        id: webhookId,
+        tenantId,
+      },
+      select: WEBHOOK_ENDPOINT_PUBLIC_SELECT,
     });
   }
 
   async testWebhookDelivery(
     webhookId: string,
+    tenantId: string,
     eventType: OutboxEventType = OutboxEventType.ORDER_ALLOCATED,
   ) {
-    const endpoint = await this.prisma.webhookEndpoint.findUnique({
-      where: { id: webhookId },
+    const endpoint = await this.prisma.webhookEndpoint.findFirst({
+      where: {
+        id: webhookId,
+        tenantId,
+      },
     });
 
     if (!endpoint) {
@@ -217,9 +384,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     try {
       const endpoints = await this.getMatchingWebhookEndpoints(event.eventType, event.tenantId);
       if (endpoints.length > 0) {
-        await Promise.all(
-          endpoints.map((endpoint) => this.deliverToWebhook(endpoint, event)),
-        );
+        await Promise.all(endpoints.map((endpoint) => this.deliverToWebhook(endpoint, event)));
       }
 
       await this.prisma.outboxEvent.update({
@@ -254,16 +419,22 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     eventType: OutboxEventType,
     tenantId: string | null,
   ): Promise<WebhookEndpoint[]> {
+    if (!tenantId) {
+      return [];
+    }
+
     const endpoints = await this.prisma.webhookEndpoint.findMany({
       where: {
         isActive: true,
-        OR: [{ tenantId: null }, ...(tenantId ? [{ tenantId }] : [])],
+        tenantId,
       },
       orderBy: { createdAt: 'asc' },
     });
 
     return endpoints.filter((endpoint) => {
-      const eventList = Array.isArray(endpoint.events) ? endpoint.events : [];
+      const eventList = Array.isArray(endpoint.events)
+        ? endpoint.events.map((entry) => String(entry))
+        : [];
       return eventList.includes(eventType) || eventList.includes('*');
     });
   }
@@ -289,8 +460,21 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
       'x-rfid-event-type': event.eventType,
     };
 
-    if (endpoint.secret) {
-      headers['x-rfid-signature'] = createHmac('sha256', endpoint.secret).update(body).digest('hex');
+    if (endpoint.secretEncrypted && endpoint.secretIv && endpoint.secretTag) {
+      const decryptedSecret = decryptSecret(
+        {
+          encrypted: endpoint.secretEncrypted,
+          iv: endpoint.secretIv,
+          tag: endpoint.secretTag,
+        },
+        this.secretsEncryptionKey,
+      );
+
+      if (endpoint.secretHash && hashToken(decryptedSecret) !== endpoint.secretHash) {
+        throw new Error(`Webhook ${endpoint.id} secret integrity check failed.`);
+      }
+
+      headers['x-rfid-signature'] = createHmac('sha256', decryptedSecret).update(body).digest('hex');
     }
 
     const controller = new AbortController();

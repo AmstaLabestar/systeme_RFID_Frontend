@@ -7,6 +7,5 @@ export * from './marketplaceService';
 export * from './pdfService';
 export * from './publicFeedbackService';
 export * from './queryKeys';
-export * from './systemStoreService';
 export * from './types';
 export * from './utils';

@@ -61,8 +61,11 @@ export class MarketplaceCheckoutError extends Error {
 }
 
 function createIdempotencyKey(productId: string, quantity: number): string {
-  const bucket = Math.floor(Date.now() / 10_000);
-  return `order:${productId}:${quantity}:${bucket}`;
+  const randomPart =
+    typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  return `order:${productId}:${quantity}:${randomPart}`;
 }
 
 function getStockMapFromSystems(catalog: Product[], rawSystems: unknown): Record<string, number | null> {
@@ -236,7 +239,7 @@ export const marketplaceService = {
         },
       );
       const purchase = toPurchaseResponse(response.data);
-      const refreshedState = await this.fetchMarketplaceState();
+      const refreshedState = await marketplaceService.fetchMarketplaceState();
 
       return {
         purchaseId: purchase.purchaseId,
@@ -257,7 +260,7 @@ export const marketplaceService = {
         toActivateDevicePayload(input),
       );
       const activation = toActivateDeviceResponse(response.data);
-      const refreshedState = await this.fetchMarketplaceState();
+      const refreshedState = await marketplaceService.fetchMarketplaceState();
 
       return {
         device: activation.device,

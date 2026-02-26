@@ -10,7 +10,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { accessService, queryKeys, systemStoreService } from '@/app/services';
+import { accessService, queryKeys } from '@/app/services';
 import { useAuth } from '@/app/contexts/auth';
 import { useMarketplace } from '@/app/contexts/marketplace';
 import { useNotifications } from '@/app/contexts/notifications';
@@ -57,7 +57,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
 
   const servicesStateQuery = useQuery({
     queryKey: queryKeys.services.state(userScope),
-    queryFn: systemStoreService.fetchServicesState,
+    queryFn: accessService.fetchServicesState,
     enabled: Boolean(user),
   });
 

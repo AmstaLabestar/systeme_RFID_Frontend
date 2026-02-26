@@ -118,36 +118,51 @@ export class InventoryService {
       return [];
     }
 
-    const [deviceCounts, extensionCounts] = await Promise.all([
-      Promise.all(
-        systems.map((system) =>
-          this.prisma.device.count({
-            where: {
-              systemId: system.id,
-              status: DeviceStatus.IN_STOCK,
-              ownerId: null,
-            },
-          }),
-        ),
-      ),
-      Promise.all(
-        systems.map((system) =>
-          this.prisma.identifier.count({
-            where: {
-              systemId: system.id,
-              status: IdentifierStatus.IN_STOCK,
-              ownerId: null,
-              deviceId: null,
-            },
-          }),
-        ),
-      ),
+    const systemIds = systems.map((system) => system.id);
+
+    const [deviceGroups, extensionGroups] = await Promise.all([
+      this.prisma.device.groupBy({
+        by: ['systemId'],
+        where: {
+          systemId: {
+            in: systemIds,
+          },
+          status: DeviceStatus.IN_STOCK,
+          ownerId: null,
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      this.prisma.identifier.groupBy({
+        by: ['systemId'],
+        where: {
+          systemId: {
+            in: systemIds,
+          },
+          status: IdentifierStatus.IN_STOCK,
+          ownerId: null,
+          deviceId: null,
+        },
+        _count: {
+          _all: true,
+        },
+      }),
     ]);
 
-    return systems.map((system, index) => {
+    const deviceCountBySystem = new Map(
+      deviceGroups.map((entry) => [entry.systemId, entry._count._all]),
+    );
+    const extensionCountBySystem = new Map(
+      extensionGroups.map((entry) => [entry.systemId, entry._count._all]),
+    );
+
+    return systems.map((system) => {
       const supportsIdentifiers = this.supportsIdentifiers(system);
-      const availableDevices = deviceCounts[index] ?? 0;
-      const availableExtensions = supportsIdentifiers ? (extensionCounts[index] ?? 0) : 0;
+      const availableDevices = deviceCountBySystem.get(system.id) ?? 0;
+      const availableExtensions = supportsIdentifiers
+        ? (extensionCountBySystem.get(system.id) ?? 0)
+        : 0;
       const isLowStock =
         availableDevices <= system.lowStockThreshold ||
         (supportsIdentifiers && availableExtensions <= system.lowStockThreshold);
@@ -669,7 +684,8 @@ export class InventoryService {
       }),
       this.prisma.adminActionLog.findMany({
         where: {
-          OR: [{ targetId: deviceId }, { targetType: 'DEVICE' }],
+          targetType: 'DEVICE',
+          targetId: deviceId,
         },
         orderBy: { createdAt: 'desc' },
         take: 100,

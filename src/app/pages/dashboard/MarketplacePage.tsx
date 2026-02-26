@@ -417,6 +417,7 @@ export function MarketplacePage() {
         <h2 id="marketplace-extensions-heading" className="text-lg font-semibold text-[var(--text-primary)]">
           {t('marketplace.catalog.extensions')}
         </h2>
+        <p className="text-sm text-[var(--text-secondary)]">{t('marketplace.extensions.flowHint')}</p>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {identifierProducts.map((product) => {
             const quantityInputId = `quantity-${product.id}`;

@@ -1,6 +1,7 @@
 export interface AccessTokenPayload {
   userId: string;
   email: string;
+  tenantId: string;
   isTwoFactorAuthenticated: boolean;
 }
 

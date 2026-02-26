@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { AUTH_ROUTES } from './contracts';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4012';
@@ -159,8 +159,9 @@ function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
       return requestConfig;
     }
 
-    requestConfig.headers = requestConfig.headers ?? {};
-    (requestConfig.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+    const headers = AxiosHeaders.from(requestConfig.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    requestConfig.headers = headers;
     return requestConfig;
   });
 
@@ -193,8 +194,9 @@ function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
       }
 
       requestConfig._retry = true;
-      requestConfig.headers = requestConfig.headers ?? {};
-      (requestConfig.headers as Record<string, string>).Authorization = `Bearer ${refreshedAccessToken}`;
+      const headers = AxiosHeaders.from(requestConfig.headers);
+      headers.set('Authorization', `Bearer ${refreshedAccessToken}`);
+      requestConfig.headers = headers;
 
       return client.request(requestConfig);
     },

@@ -3,6 +3,9 @@ import { IdentifierStatus, type Identifier, type IdentifierType, type Prisma } f
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { sanitizeString } from '../../common/utils/security.util';
 
+const IDENTIFIER_MAC_REGEX = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
+const GENERIC_IDENTIFIER_REGEX = /^[A-Z0-9][A-Z0-9:_-]{1,119}$/;
+
 interface CreateIdentifiersInput {
   systemId: string;
   type: IdentifierType;
@@ -65,9 +68,19 @@ export class IdentifiersService {
 
   private normalizePhysicalIdentifier(value: string): string {
     const normalized = sanitizeString(String(value)).toUpperCase();
+    if (!normalized) {
+      throw new BadRequestException('Chaque identifiant physique doit etre renseigne.');
+    }
 
-    if (normalized.length < 3 || normalized.length > 120) {
-      throw new BadRequestException('Chaque identifiant physique doit contenir entre 3 et 120 caracteres.');
+    const normalizedAsMac = normalized.replaceAll('-', ':');
+    if (IDENTIFIER_MAC_REGEX.test(normalizedAsMac)) {
+      return normalizedAsMac;
+    }
+
+    if (!GENERIC_IDENTIFIER_REGEX.test(normalized)) {
+      throw new BadRequestException(
+        'Identifiant physique invalide. Utilisez une MAC (AA:BB:CC:DD:EE:FF) ou un code alphanumerique (A-Z, 0-9, -, _, :).',
+      );
     }
 
     return normalized;

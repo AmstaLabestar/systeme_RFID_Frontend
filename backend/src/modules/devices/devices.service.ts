@@ -38,6 +38,14 @@ export class DevicesService {
               ownerId,
             },
             orderBy: { createdAt: 'asc' },
+            include: {
+              serviceAssignment: {
+                select: {
+                  employeeId: true,
+                  deviceId: true,
+                },
+              },
+            },
           },
         },
       }),
@@ -49,6 +57,12 @@ export class DevicesService {
         orderBy: { createdAt: 'asc' },
         include: {
           system: true,
+          serviceAssignment: {
+            select: {
+              employeeId: true,
+              deviceId: true,
+            },
+          },
         },
       }),
     ]).then(([devices, standaloneIdentifiers]) => ({
@@ -76,6 +90,7 @@ export class DevicesService {
         'La MAC fournie ne correspond pas a la MAC physique allouee pour ce boitier.',
       );
     }
+    const normalizedConfiguredName = dto.name?.trim();
 
     return this.prisma.$transaction(async (tx) => {
       const updatedDevice = await tx.device.update({
@@ -83,7 +98,10 @@ export class DevicesService {
           id: device.id,
         },
         data: {
-          configuredName: dto.name.trim(),
+          configuredName:
+            normalizedConfiguredName && normalizedConfiguredName.length > 0
+              ? normalizedConfiguredName
+              : null,
           configuredLocation: dto.location.trim(),
           isConfigured: true,
         },

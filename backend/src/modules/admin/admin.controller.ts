@@ -100,8 +100,8 @@ export class AdminController {
   }
 
   @Get('webhooks')
-  listWebhooks() {
-    return this.outboxService.listWebhookEndpoints();
+  listWebhooks(@CurrentUser() user: AccessTokenPayload) {
+    return this.outboxService.listWebhookEndpoints(user.tenantId);
   }
 
   @Post('webhooks')
@@ -114,6 +114,7 @@ export class AdminController {
       name: payload.name,
       url: payload.url,
       events: payload.events,
+      tenantId: user.tenantId,
       secret: payload.secret,
     });
 
@@ -136,7 +137,11 @@ export class AdminController {
     @Param('id') webhookId: string,
     @Body() dto: UpdateWebhookActivationDto,
   ) {
-    const updated = await this.outboxService.setWebhookActivation(webhookId, dto.isActive);
+    const updated = await this.outboxService.setWebhookActivation(
+      webhookId,
+      user.tenantId,
+      dto.isActive,
+    );
 
     await this.adminAuditService.createLog({
       actorId: user.userId,
@@ -157,7 +162,11 @@ export class AdminController {
     @Param('id') webhookId: string,
     @Body() dto: TestWebhookDto,
   ) {
-    const result = await this.outboxService.testWebhookDelivery(webhookId, dto.eventType);
+    const result = await this.outboxService.testWebhookDelivery(
+      webhookId,
+      user.tenantId,
+      dto.eventType,
+    );
 
     await this.adminAuditService.createLog({
       actorId: user.userId,
