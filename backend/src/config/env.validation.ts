@@ -9,6 +9,29 @@ export const envValidationSchema = Joi.object({
     then: Joi.boolean().default(false),
     otherwise: Joi.boolean().default(true),
   }),
+  METRICS_AUTH_MODE: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().valid('none', 'basic').default('basic'),
+    otherwise: Joi.string().valid('none', 'basic').default('none'),
+  }),
+  METRICS_BASIC_AUTH_USERNAME: Joi.when('METRICS_AUTH_MODE', {
+    is: 'basic',
+    then: Joi.when('METRICS_ENABLED', {
+      is: true,
+      then: Joi.string().min(3).max(120).required(),
+      otherwise: Joi.string().allow('').optional(),
+    }),
+    otherwise: Joi.string().allow('').optional(),
+  }),
+  METRICS_BASIC_AUTH_PASSWORD: Joi.when('METRICS_AUTH_MODE', {
+    is: 'basic',
+    then: Joi.when('METRICS_ENABLED', {
+      is: true,
+      then: Joi.string().min(12).max(256).required(),
+      otherwise: Joi.string().allow('').optional(),
+    }),
+    otherwise: Joi.string().allow('').optional(),
+  }),
 
   DATABASE_URL: Joi.string().uri({ scheme: ['postgresql', 'postgres'] }).required(),
 
@@ -23,6 +46,7 @@ export const envValidationSchema = Joi.object({
   CORS_ALLOWED_ORIGINS: Joi.string().required(),
 
   BCRYPT_SALT_ROUNDS: Joi.number().integer().min(10).max(16).default(12),
+  REGISTER_MIN_RESPONSE_MS: Joi.number().integer().min(150).max(5000).default(900),
   AUTH_ATTEMPT_REDIS_URL: Joi.string()
     .uri({ scheme: ['redis', 'rediss'] })
     .allow('')

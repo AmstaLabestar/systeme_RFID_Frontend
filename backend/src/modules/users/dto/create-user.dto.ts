@@ -5,13 +5,13 @@ import {
   IsString,
   Length,
   Matches,
-  MinLength,
 } from 'class-validator';
 import {
   normalizeEmail,
   normalizePhone,
   sanitizeString,
 } from '../../../common/utils/security.util';
+import { IsModernPassword } from '../../../common/validators/password-policy.validator';
 
 export class CreateUserDto {
   @Transform(({ value }) => sanitizeString(String(value)))
@@ -31,7 +31,7 @@ export class CreateUserDto {
   @Transform(({ value }) => (value !== undefined ? sanitizeString(String(value)) : value))
   @IsOptional()
   @IsString()
-  @MinLength(8)
+  @IsModernPassword()
   password?: string;
 
   @Transform(({ value }) => sanitizeString(String(value)))

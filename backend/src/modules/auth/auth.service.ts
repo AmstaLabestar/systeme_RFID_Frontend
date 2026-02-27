@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -60,6 +61,10 @@ import {
 import { MagicLinkTokensRepository } from './repositories/magic-link-tokens.repository';
 import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 import { AuthAttemptService } from './services/auth-attempt.service';
+import {
+  COMPROMISED_PASSWORD_CHECKER,
+  type CompromisedPasswordChecker,
+} from './services/hibp-password-checker.service';
 import type { GoogleOAuthUser } from './strategies/google.strategy';
 
 interface IssuedTokens {
@@ -101,8 +106,13 @@ const { authenticator } = require('otplib') as { authenticator: OtplibAuthentica
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const qrCode = require('qrcode') as QrCodeModule;
 
+type RegisterConflictReason = 'email_conflict' | 'phone_conflict' | 'identifier_conflict';
+
+const REGISTER_CONFLICT_MESSAGE = 'Unable to create account with provided information.';
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly accessSecret: string;
   private readonly refreshSecret: string;
   private readonly accessTtl: string;
@@ -122,6 +132,7 @@ export class AuthService {
   private readonly defaultTenantName: string;
   private readonly defaultTenantDomain: string;
   private readonly defaultSignupRoleName: string;
+  private readonly registerMinResponseMs: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -133,6 +144,8 @@ export class AuthService {
     private readonly magicLinkTokensRepository: MagicLinkTokensRepository,
     private readonly googleTokenVerifierService: GoogleTokenVerifierService,
     private readonly authAttemptService: AuthAttemptService,
+    @Inject(COMPROMISED_PASSWORD_CHECKER)
+    private readonly compromisedPasswordChecker: CompromisedPasswordChecker,
     @Inject(EMAIL_GATEWAY) private readonly emailGateway: EmailGateway,
   ) {
     this.accessSecret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
@@ -154,6 +167,7 @@ export class AuthService {
     this.defaultTenantName = this.configService.getOrThrow<string>('DEFAULT_TENANT_NAME');
     this.defaultTenantDomain = this.configService.getOrThrow<string>('DEFAULT_TENANT_DOMAIN');
     this.defaultSignupRoleName = this.configService.getOrThrow<string>('DEFAULT_SIGNUP_ROLE_NAME');
+    this.registerMinResponseMs = this.configService.getOrThrow<number>('REGISTER_MIN_RESPONSE_MS');
 
     authenticator.options = {
       step: 30,
@@ -162,47 +176,86 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto, meta: RequestMeta): Promise<AuthResponseDto> {
+    const startedAt = Date.now();
     const normalizedEmail = normalizeEmail(dto.email);
+    const normalizedPhone = dto.phoneNumber ? normalizePhone(dto.phoneNumber) : undefined;
     const attemptKey = `register:${meta.ipAddress ?? 'unknown'}:${normalizedEmail}`;
     await this.authAttemptService.assertWithinLimit(attemptKey, 5, 15 * 60_000);
 
-    const normalizedPhone = dto.phoneNumber ? normalizePhone(dto.phoneNumber) : undefined;
     if (normalizedPhone && !isValidPhone(normalizedPhone)) {
       throw new BadRequestException('Invalid phone number format.');
     }
 
+    await this.assertPasswordIsAllowed(dto.password);
+    const passwordHash = await bcrypt.hash(dto.password, this.bcryptSaltRounds);
     const [existingByEmail, existingByPhone] = await Promise.all([
       this.usersRepository.findAuthByEmail(normalizedEmail),
       normalizedPhone ? this.usersRepository.findAuthByPhoneNumber(normalizedPhone) : null,
     ]);
 
     if (existingByEmail) {
-      await this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
-      throw new ConflictException('Email already exists.');
+      return this.throwRegisterConflict({
+        reason: 'email_conflict',
+        attemptKey,
+        normalizedEmail,
+        normalizedPhone,
+        meta,
+        startedAt,
+      });
     }
 
     if (existingByPhone) {
-      await this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
-      throw new ConflictException('Phone number already exists.');
+      return this.throwRegisterConflict({
+        reason: 'phone_conflict',
+        attemptKey,
+        normalizedEmail,
+        normalizedPhone,
+        meta,
+        startedAt,
+      });
     }
 
     const { tenant, role } = await this.getOrCreateSignupTenantAndRole({
       tenantName: dto.tenantName ?? dto.company,
     });
 
-    const passwordHash = await bcrypt.hash(dto.password, this.bcryptSaltRounds);
-    const createdUser = await this.usersRepository.create({
-      name: this.resolveRegistrationName(dto),
-      email: normalizedEmail,
-      phoneNumber: normalizedPhone ?? null,
-      passwordHash,
-      provider: AuthProvider.LOCAL,
-      tenant: { connect: { id: tenant.id } },
-      role: { connect: { id: role.id } },
-    });
+    let createdUser: AuthUserRecord;
+    try {
+      createdUser = await this.usersRepository.create({
+        name: this.resolveRegistrationName(dto),
+        email: normalizedEmail,
+        phoneNumber: normalizedPhone ?? null,
+        passwordHash,
+        provider: AuthProvider.LOCAL,
+        tenant: { connect: { id: tenant.id } },
+        role: { connect: { id: role.id } },
+      });
+    } catch (error) {
+      if (this.isRegisterIdentityConstraintViolation(error)) {
+        const target = this.extractPrismaConstraintTargets(error);
+        const reason: RegisterConflictReason = target.includes('email')
+          ? 'email_conflict'
+          : target.includes('phoneNumber')
+            ? 'phone_conflict'
+            : 'identifier_conflict';
+
+        return this.throwRegisterConflict({
+          reason,
+          attemptKey,
+          normalizedEmail,
+          normalizedPhone,
+          meta,
+          startedAt,
+          target,
+        });
+      }
+
+      throw error;
+    }
 
     await this.authAttemptService.reset(attemptKey);
     const tokens = await this.issueTokens(createdUser, meta);
+    await this.ensureRegisterMinimumResponseTime(startedAt);
     return this.toAuthResponse(createdUser, tokens, dto.redirectTo);
   }
 
@@ -841,6 +894,68 @@ export class AuthService {
   private resolveNameFromEmail(email: string): string {
     const localPart = sanitizeString(email.split('@')[0] ?? '').replace(/[._-]+/g, ' ').trim();
     return localPart || 'User';
+  }
+
+  private async throwRegisterConflict(params: {
+    reason: RegisterConflictReason;
+    attemptKey: string;
+    normalizedEmail: string;
+    normalizedPhone?: string;
+    meta: RequestMeta;
+    startedAt: number;
+    target?: string[];
+  }): Promise<never> {
+    await this.authAttemptService.recordFailure(params.attemptKey, 15 * 60_000);
+    this.logger.warn(
+      `register_conflict reason=${params.reason} requestId=${params.meta.requestId ?? 'n/a'} ip=${params.meta.ipAddress ?? 'n/a'} emailHash=${this.maskIdentifierForLog(params.normalizedEmail)} phoneHash=${params.normalizedPhone ? this.maskIdentifierForLog(params.normalizedPhone) : 'n/a'} prismaTarget=${params.target?.join(',') ?? 'n/a'}`,
+    );
+    await this.ensureRegisterMinimumResponseTime(params.startedAt);
+    throw new ConflictException(REGISTER_CONFLICT_MESSAGE);
+  }
+
+  private isRegisterIdentityConstraintViolation(
+    error: unknown,
+  ): error is Prisma.PrismaClientKnownRequestError {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      return false;
+    }
+
+    const targets = this.extractPrismaConstraintTargets(error);
+    return targets.includes('email') || targets.includes('phoneNumber');
+  }
+
+  private extractPrismaConstraintTargets(
+    error: Prisma.PrismaClientKnownRequestError,
+  ): string[] {
+    const target = (error.meta as { target?: unknown } | undefined)?.target;
+    if (!Array.isArray(target)) {
+      return [];
+    }
+    return target.map((value) => String(value));
+  }
+
+  private maskIdentifierForLog(value: string): string {
+    return hashToken(value).slice(0, 12);
+  }
+
+  private async ensureRegisterMinimumResponseTime(startedAt: number): Promise<void> {
+    const elapsedMs = Date.now() - startedAt;
+    const remainingMs = this.registerMinResponseMs - elapsedMs;
+    if (remainingMs > 0) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, remainingMs);
+      });
+    }
+  }
+
+  private async assertPasswordIsAllowed(password: string): Promise<void> {
+    const result = await this.compromisedPasswordChecker.check(password);
+
+    if (result.compromised) {
+      throw new BadRequestException(
+        'Password has been exposed in known data breaches. Please choose a different password.',
+      );
+    }
   }
 
   private async findUserByLoginIdentifier(

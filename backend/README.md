@@ -31,7 +31,10 @@ Detailed OWASP mapping: `backend/docs/security.md`.
    - `JWT_REFRESH_SECRET`
    - `GOOGLE_CLIENT_ID`
    - `TRUST_PROXY_HOPS` (set to `0` unless you run behind trusted reverse proxies)
+   - `METRICS_AUTH_MODE` (`basic` recommended in production when `METRICS_ENABLED=true`)
+   - `METRICS_BASIC_AUTH_USERNAME` / `METRICS_BASIC_AUTH_PASSWORD` when using `METRICS_AUTH_MODE=basic`
    - `DEFAULT_SIGNUP_ROLE_NAME` (recommended: `member`)
+   - `REGISTER_MIN_RESPONSE_MS` (minimum response latency for anti-enumeration on signup)
 3. For email delivery in production, set:
    - `EMAIL_PROVIDER=smtp`
    - `EMAIL_FROM`
@@ -68,3 +71,10 @@ npm run start:dev
 - `GET /auth/session`
 
 Successful auth responses include `redirectTo` for frontend dashboard redirection.
+
+## Metrics Endpoint Security
+
+- Endpoint: `GET /metrics`
+- In production, set `METRICS_ENABLED=true` and keep `METRICS_AUTH_MODE=basic`.
+- Configure Prometheus with basic auth credentials matching `METRICS_BASIC_AUTH_USERNAME` and `METRICS_BASIC_AUTH_PASSWORD`.
+- Prefer reverse-proxy/network restriction (private ingress / allowlist) as the first barrier, and keep app-level basic auth as defense in depth.
