@@ -32,6 +32,8 @@ export interface AuthResponseDto {
   user: AuthUserResponseDto;
 }
 
+export type PublicAuthResponseDto = Omit<AuthResponseDto, 'accessToken' | 'refreshToken' | 'token'>;
+
 export interface LoginTwoFactorChallengeResponseDto {
   requiresTwoFactor: true;
   twoFactorToken: string;

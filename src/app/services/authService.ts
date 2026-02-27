@@ -48,8 +48,6 @@ export interface VerifySignInTwoFactorPayload {
 }
 
 export interface AuthResponse {
-  token: string;
-  refreshToken?: string;
   redirectTo?: string;
   user: AuthUser;
 }
@@ -282,14 +280,9 @@ async function withAuthErrorHandling<T>(
 }
 
 export const authService = {
-  async getSession(token: string): Promise<AuthUser> {
+  async getSession(): Promise<AuthUser> {
     return withAuthErrorHandling(async () => {
-      const response = await authApiClient.get<unknown>(AUTH_ROUTES.session, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        _skipAuthRefresh: true,
-      } as any);
+      const response = await authApiClient.get<unknown>(AUTH_ROUTES.session);
       return toSessionUserResponse(response.data);
     }, 'Session impossible a recuperer.');
   },
@@ -454,13 +447,11 @@ export const authService = {
     }, 'Verification du Magic Link impossible.');
   },
 
-  async refresh(refreshToken: string): Promise<RefreshTokenResponse> {
+  async refresh(refreshToken?: string): Promise<RefreshTokenResponse> {
     return withAuthErrorHandling(async () => {
       const response = await authApiClient.post<unknown>(
         AUTH_ROUTES.refresh,
-        {
-          refreshToken,
-        },
+        refreshToken ? { refreshToken } : {},
         {
           _skipAuthHeader: true,
           _skipAuthRefresh: true,
@@ -490,18 +481,9 @@ export const authService = {
     }, 'Verification 2FA impossible.');
   },
 
-  async logout(token: string, refreshToken?: string): Promise<void> {
+  async logout(): Promise<void> {
     await withAuthErrorHandling(async () => {
-      await authApiClient.post<{ success: boolean }>(
-        AUTH_ROUTES.logout,
-        refreshToken ? { refreshToken } : {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          _skipAuthRefresh: true,
-        } as any,
-      );
+      await authApiClient.post<{ success: boolean }>(AUTH_ROUTES.logout, {});
     }, 'Deconnexion impossible.');
   },
 };

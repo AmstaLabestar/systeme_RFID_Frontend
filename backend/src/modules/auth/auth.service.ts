@@ -10,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuthProvider, Prisma, type Role, type Tenant } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import ms from 'ms';
 import {

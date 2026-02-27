@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RolesModule } from '../roles/roles.module';
 import { TenantsModule } from '../tenants/tenants.module';
@@ -9,7 +10,7 @@ import { UsersRepository } from './repositories/users.repository';
 @Module({
   imports: [RolesModule, TenantsModule],
   controllers: [UsersController],
-  providers: [UsersService, UsersRepository, RolesGuard],
+  providers: [UsersService, UsersRepository, RolesGuard, PermissionsGuard],
   exports: [UsersService, UsersRepository],
 })
 export class UsersModule {}

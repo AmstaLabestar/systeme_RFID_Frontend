@@ -25,7 +25,15 @@ export class CreateRoleDto {
   @IsString({ each: true })
   @MaxLength(120, { each: true })
   @Transform(({ value }) =>
-    Array.isArray(value) ? value.map((entry) => sanitizeString(String(entry))) : value,
+    Array.isArray(value)
+      ? Array.from(
+          new Set(
+            value
+              .map((entry) => sanitizeString(String(entry)).toLowerCase())
+              .filter((entry) => entry.length > 0),
+          ),
+        )
+      : value,
   )
   permissions!: string[];
 }

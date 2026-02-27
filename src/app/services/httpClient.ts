@@ -1,7 +1,8 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 import { AUTH_ROUTES } from './contracts';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4012';
+const DEFAULT_CSRF_COOKIE_NAME = 'rfid.csrf_token';
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -21,6 +22,36 @@ function getAuthApiBaseUrl(): string {
 function getSystemApiBaseUrl(): string {
   const envBaseUrl = import.meta.env.VITE_SYSTEM_API_URL || import.meta.env.VITE_AUTH_API_URL;
   return normalizeBaseUrl(envBaseUrl || DEFAULT_API_BASE_URL);
+}
+
+function getCsrfCookieName(): string {
+  const configuredName = import.meta.env.VITE_AUTH_CSRF_COOKIE_NAME;
+  if (typeof configuredName === 'string' && configuredName.trim().length > 0) {
+    return configuredName.trim();
+  }
+  return DEFAULT_CSRF_COOKIE_NAME;
+}
+
+function readCookieValue(cookieName: string): string | null {
+  if (typeof document === 'undefined' || !document.cookie) {
+    return null;
+  }
+
+  const encodedName = `${encodeURIComponent(cookieName)}=`;
+  const plainName = `${cookieName}=`;
+  const cookieParts = document.cookie.split(';');
+
+  for (const part of cookieParts) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(encodedName)) {
+      return decodeURIComponent(trimmed.slice(encodedName.length));
+    }
+    if (trimmed.startsWith(plainName)) {
+      return trimmed.slice(plainName.length);
+    }
+  }
+
+  return null;
 }
 
 function extractApiMessage(payload: unknown): string | null {
@@ -78,6 +109,29 @@ async function refreshSessionCookie(): Promise<boolean> {
 }
 
 function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
+  client.interceptors.request.use((requestConfig) => {
+    const method = (requestConfig.method || 'get').toUpperCase();
+    const isMutatingMethod =
+      method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+
+    if (!isMutatingMethod) {
+      return requestConfig;
+    }
+
+    const csrfToken = readCookieValue(getCsrfCookieName());
+    if (!csrfToken) {
+      return requestConfig;
+    }
+
+    const headers = AxiosHeaders.from(requestConfig.headers);
+    if (!headers.has('x-csrf-token')) {
+      headers.set('x-csrf-token', csrfToken);
+    }
+    requestConfig.headers = headers;
+
+    return requestConfig;
+  });
+
   client.interceptors.response.use(
     (response) => response,
     async (error: unknown) => {

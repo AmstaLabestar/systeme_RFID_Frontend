@@ -12,8 +12,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import ms from 'ms';
+import { randomBytes } from 'crypto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
@@ -21,7 +23,11 @@ import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.int
 import type { RequestMeta } from '../../common/interfaces/request-meta.interface';
 import { readCookieValue } from '../../common/utils/security.util';
 import { AuthService } from './auth.service';
-import type { AuthResponseDto, LoginTwoFactorChallengeResponseDto } from './dto/auth-response.dto';
+import type {
+  AuthResponseDto,
+  LoginTwoFactorChallengeResponseDto,
+  PublicAuthResponseDto,
+} from './dto/auth-response.dto';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -33,11 +39,14 @@ import { VerifyLoginTwoFactorDto } from './dto/verify-login-2fa.dto';
 import { VerifyTwoFactorCodeDto } from './dto/verify-two-factor-code.dto';
 import type { GoogleOAuthUser } from './strategies/google.strategy';
 
+type RequestWithCorrelationId = Request & { requestId?: string };
+
 @Controller('auth')
 export class AuthController {
   private readonly isProduction: boolean;
   private readonly accessCookieName: string;
   private readonly refreshCookieName: string;
+  private readonly csrfCookieName: string;
   private readonly refreshCookieTtlMs: number;
 
   constructor(
@@ -50,6 +59,8 @@ export class AuthController {
       this.configService.get<string>('AUTH_ACCESS_COOKIE_NAME') ?? 'rfid.access_token';
     this.refreshCookieName =
       this.configService.get<string>('AUTH_REFRESH_COOKIE_NAME') ?? 'rfid.refresh_token';
+    this.csrfCookieName =
+      this.configService.get<string>('AUTH_CSRF_COOKIE_NAME') ?? 'rfid.csrf_token';
     this.refreshCookieTtlMs = this.parseDurationMs(
       this.configService.getOrThrow<string>('JWT_REFRESH_TTL'),
       'JWT_REFRESH_TTL',
@@ -57,6 +68,12 @@ export class AuthController {
   }
 
   @Post(['register', 'signup'])
+  @Throttle({
+    global: {
+      limit: 6,
+      ttl: 60_000,
+    },
+  })
   async register(
     @Body() dto: RegisterDto,
     @Req() req: Request,
@@ -64,10 +81,16 @@ export class AuthController {
   ) {
     const authResponse = await this.authService.register(dto, this.extractRequestMeta(req));
     this.setAuthCookies(res, authResponse);
-    return authResponse;
+    return this.toPublicAuthResponse(authResponse);
   }
 
   @Post(['login', 'signin'])
+  @Throttle({
+    global: {
+      limit: 20,
+      ttl: 60_000,
+    },
+  })
   @HttpCode(200)
   async login(
     @Body() dto: LoginDto,
@@ -78,10 +101,16 @@ export class AuthController {
     if (this.isAuthResponse(authResult)) {
       this.setAuthCookies(res, authResult);
     }
-    return authResult;
+    return this.toPublicAuthResult(authResult);
   }
 
   @Post(['login/verify-2fa', 'signin/verify-2fa'])
+  @Throttle({
+    global: {
+      limit: 30,
+      ttl: 60_000,
+    },
+  })
   @HttpCode(200)
   async verifyLoginTwoFactor(
     @Body() dto: VerifyLoginTwoFactorDto,
@@ -93,7 +122,7 @@ export class AuthController {
       this.extractRequestMeta(req),
     );
     this.setAuthCookies(res, authResponse);
-    return authResponse;
+    return this.toPublicAuthResponse(authResponse);
   }
 
   @Get('google')
@@ -117,10 +146,16 @@ export class AuthController {
     if (this.isAuthResponse(authResult)) {
       this.setAuthCookies(res, authResult);
     }
-    return authResult;
+    return this.toPublicAuthResult(authResult);
   }
 
   @Post(['google', 'google/verify'])
+  @Throttle({
+    global: {
+      limit: 15,
+      ttl: 60_000,
+    },
+  })
   @HttpCode(200)
   async googleLogin(
     @Body() dto: GoogleLoginDto,
@@ -131,16 +166,28 @@ export class AuthController {
     if (this.isAuthResponse(authResult)) {
       this.setAuthCookies(res, authResult);
     }
-    return authResult;
+    return this.toPublicAuthResult(authResult);
   }
 
   @Post('magic-link')
+  @Throttle({
+    global: {
+      limit: 6,
+      ttl: 60_000,
+    },
+  })
   @HttpCode(200)
   requestMagicLink(@Body() dto: RequestMagicLinkDto, @Req() req: Request) {
     return this.authService.requestMagicLink(dto, this.extractRequestMeta(req));
   }
 
   @Post('magic-link/verify')
+  @Throttle({
+    global: {
+      limit: 20,
+      ttl: 60_000,
+    },
+  })
   @HttpCode(200)
   async verifyMagicLink(
     @Body() dto: VerifyMagicLinkDto,
@@ -151,7 +198,7 @@ export class AuthController {
     if (this.isAuthResponse(authResult)) {
       this.setAuthCookies(res, authResult);
     }
-    return authResult;
+    return this.toPublicAuthResult(authResult);
   }
 
   @Post('2fa/setup')
@@ -179,6 +226,12 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Throttle({
+    global: {
+      limit: 60,
+      ttl: 60_000,
+    },
+  })
   @HttpCode(200)
   async refresh(
     @Body() dto: RefreshTokenDto,
@@ -195,10 +248,16 @@ export class AuthController {
       this.extractRequestMeta(req),
     );
     this.setAuthCookies(res, authResponse);
-    return authResponse;
+    return this.toPublicAuthResponse(authResponse);
   }
 
   @Post('logout')
+  @Throttle({
+    global: {
+      limit: 30,
+      ttl: 60_000,
+    },
+  })
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   async logout(
@@ -215,16 +274,22 @@ export class AuthController {
 
   @Get('session')
   @UseGuards(JwtAuthGuard)
-  session(@CurrentUser() user: AccessTokenPayload) {
+  session(
+    @CurrentUser() user: AccessTokenPayload,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    this.setCsrfCookie(res, this.issueCsrfToken());
     return this.authService.session(user.userId);
   }
 
   private extractRequestMeta(req: Request): RequestMeta {
+    const requestWithCorrelationId = req as RequestWithCorrelationId;
     const userAgentHeader = req.headers['user-agent'];
     const rawUserAgent = Array.isArray(userAgentHeader) ? userAgentHeader[0] : userAgentHeader;
     const userAgent = rawUserAgent?.trim().slice(0, 512);
 
     return {
+      requestId: requestWithCorrelationId.requestId,
       ipAddress: req.ip ?? req.socket.remoteAddress ?? undefined,
       userAgent: userAgent ?? undefined,
     };
@@ -241,6 +306,25 @@ export class AuthController {
       typeof (value as Partial<AuthResponseDto>).accessToken === 'string' &&
       typeof (value as Partial<AuthResponseDto>).refreshToken === 'string'
     );
+  }
+
+  private toPublicAuthResponse(authResponse: AuthResponseDto): PublicAuthResponseDto {
+    const {
+      accessToken: _accessToken,
+      refreshToken: _refreshToken,
+      token: _token,
+      ...publicResponse
+    } = authResponse;
+    return publicResponse;
+  }
+
+  private toPublicAuthResult(
+    value: AuthResponseDto | LoginTwoFactorChallengeResponseDto,
+  ): PublicAuthResponseDto | LoginTwoFactorChallengeResponseDto {
+    if (this.isAuthResponse(value)) {
+      return this.toPublicAuthResponse(value);
+    }
+    return value;
   }
 
   private setAuthCookies(res: Response, authResponse: AuthResponseDto): void {
@@ -260,6 +344,8 @@ export class AuthController {
       ...baseCookie,
       maxAge: this.refreshCookieTtlMs,
     });
+
+    this.setCsrfCookie(res, this.issueCsrfToken());
   }
 
   private clearAuthCookies(res: Response): void {
@@ -272,6 +358,26 @@ export class AuthController {
 
     res.clearCookie(this.accessCookieName, baseCookie);
     res.clearCookie(this.refreshCookieName, baseCookie);
+    res.clearCookie(this.csrfCookieName, {
+      httpOnly: false,
+      secure: this.isProduction,
+      sameSite: 'lax',
+      path: '/',
+    });
+  }
+
+  private setCsrfCookie(res: Response, csrfToken: string): void {
+    res.cookie(this.csrfCookieName, csrfToken, {
+      httpOnly: false,
+      secure: this.isProduction,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: this.refreshCookieTtlMs,
+    });
+  }
+
+  private issueCsrfToken(): string {
+    return randomBytes(24).toString('hex');
   }
 
   private parseDurationMs(value: string, envName: string): number {

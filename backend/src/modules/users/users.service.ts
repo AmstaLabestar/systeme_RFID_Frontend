@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { ConfigService } from '@nestjs/config';
 import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
 import { CreateUserDto } from './dto/create-user.dto';

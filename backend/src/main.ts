@@ -60,16 +60,30 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const prismaService = app.get(PrismaService);
+  const nodeEnv = configService.get<string>('NODE_ENV') ?? 'development';
+  const isProduction = nodeEnv === 'production';
   const trustProxyHops = configService.getOrThrow<number>('TRUST_PROXY_HOPS');
   const httpServer = app.getHttpAdapter().getInstance();
   if (typeof httpServer?.set === 'function') {
     httpServer.set('trust proxy', trustProxyHops);
   }
 
+  if (typeof httpServer?.disable === 'function') {
+    httpServer.disable('x-powered-by');
+  }
+
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       frameguard: { action: 'deny' },
+      referrerPolicy: { policy: 'no-referrer' },
+      hsts: isProduction
+        ? {
+            maxAge: 15552000,
+            includeSubDomains: true,
+            preload: true,
+          }
+        : false,
     }),
   );
 
@@ -85,7 +99,7 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'x-csrf-token'],
   });
 
   app.useGlobalPipes(

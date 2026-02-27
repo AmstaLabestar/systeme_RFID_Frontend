@@ -5,6 +5,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -23,6 +24,7 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
   private readonly redisPrefix: string;
   private readonly maxBuckets: number;
   private readonly cleanupIntervalMs: number;
+  private readonly redisRequired: boolean;
   private cleanupTimer: NodeJS.Timeout | null = null;
   private redisClient: {
     connect: () => Promise<void>;
@@ -36,12 +38,14 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
   } | null = null;
 
   constructor(private readonly configService: ConfigService) {
+    const nodeEnv = this.configService.get<string>('NODE_ENV') ?? 'development';
     const configuredRedisUrl = this.configService.get<string>('AUTH_ATTEMPT_REDIS_URL')?.trim();
     this.redisUrl = configuredRedisUrl && configuredRedisUrl.length > 0 ? configuredRedisUrl : undefined;
     this.redisPrefix = this.configService.get<string>('AUTH_ATTEMPT_REDIS_PREFIX') ?? 'auth:attempt';
     this.maxBuckets = this.configService.get<number>('AUTH_ATTEMPT_MAX_BUCKETS') ?? 20_000;
     this.cleanupIntervalMs =
       this.configService.get<number>('AUTH_ATTEMPT_CLEANUP_INTERVAL_MS') ?? 60_000;
+    this.redisRequired = nodeEnv === 'production';
   }
 
   async onModuleInit(): Promise<void> {
@@ -50,6 +54,9 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
     }, this.cleanupIntervalMs);
 
     if (!this.redisUrl) {
+      if (this.redisRequired) {
+        throw new Error('AUTH_ATTEMPT_REDIS_URL is required in production.');
+      }
       return;
     }
 
@@ -74,6 +81,9 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
       this.redisClient = client;
       this.logger.log('Auth attempt limiter is running in Redis mode.');
     } catch (error) {
+      if (this.redisRequired) {
+        throw new Error('Failed to initialize Redis for auth attempts in production.');
+      }
       this.redisClient = null;
       this.logger.warn(
         'Failed to initialize Redis for auth attempts; falling back to in-memory limiter.',
@@ -102,6 +112,7 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
     if (await this.assertWithinLimitRedis(key, maxAttempts)) {
       return;
     }
+    this.assertFallbackAllowed();
 
     const current = this.buckets.get(key);
 
@@ -131,6 +142,7 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
     if (await this.recordFailureRedis(key, windowMs)) {
       return;
     }
+    this.assertFallbackAllowed();
 
     const current = this.buckets.get(key);
 
@@ -157,8 +169,15 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
     if (await this.resetRedis(key)) {
       return;
     }
+    this.assertFallbackAllowed();
 
     this.buckets.delete(key);
+  }
+
+  private assertFallbackAllowed(): void {
+    if (this.redisRequired) {
+      throw new ServiceUnavailableException('Authentication protection is temporarily unavailable.');
+    }
   }
 
   private getRedisKey(key: string): string {
@@ -270,6 +289,9 @@ export class AuthAttemptService implements OnModuleInit, OnModuleDestroy {
   }
 
   private handleRedisFailure(error: unknown): void {
+    if (this.redisRequired) {
+      throw new ServiceUnavailableException('Authentication protection is temporarily unavailable.');
+    }
     this.redisClient = null;
     this.logger.warn('Auth attempt Redis store is unavailable; switched to in-memory limiter.');
     if (error instanceof Error) {

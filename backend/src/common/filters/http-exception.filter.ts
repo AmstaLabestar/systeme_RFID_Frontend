@@ -8,12 +8,15 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+type RequestWithCorrelationId = Request & { requestId?: string };
+
 interface ErrorBody {
   statusCode: number;
   message: string;
   error: string;
   timestamp: string;
   path: string;
+  requestId?: string;
 }
 
 function extractMessage(value: unknown, fallback: string): string {
@@ -46,7 +49,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const context = host.switchToHttp();
     const response = context.getResponse<Response>();
-    const request = context.getRequest<Request>();
+    const request = context.getRequest<RequestWithCorrelationId>();
 
     const isHttpException = exception instanceof HttpException;
     const statusCode = isHttpException
@@ -58,6 +61,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const exceptionResponse = isHttpException ? exception.getResponse() : undefined;
     const message = extractMessage(exceptionResponse, defaultMessage);
+    const requestId = request.requestId;
 
     const body: ErrorBody = {
       statusCode,
@@ -65,7 +69,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       error: HttpStatus[statusCode] || 'Error',
       timestamp: new Date().toISOString(),
       path: request.url,
+      requestId,
     };
+
+    if (requestId) {
+      response.setHeader('x-correlation-id', requestId);
+    }
 
     if (statusCode >= 500) {
       const errorForLog =
@@ -74,7 +83,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
           : JSON.stringify(exception);
 
       this.logger.error(
-        `${request.method} ${request.url} -> ${statusCode} | ${message}`,
+        `${request.method} ${request.url} -> ${statusCode} | ${message} | requestId=${requestId ?? 'n/a'}`,
         errorForLog,
       );
     }

@@ -27,6 +27,7 @@ export const envValidationSchema = Joi.object({
   AUTH_ATTEMPT_CLEANUP_INTERVAL_MS: Joi.number().integer().min(10000).max(3600000).default(60000),
   AUTH_ACCESS_COOKIE_NAME: Joi.string().min(3).max(120).default('rfid.access_token'),
   AUTH_REFRESH_COOKIE_NAME: Joi.string().min(3).max(120).default('rfid.refresh_token'),
+  AUTH_CSRF_COOKIE_NAME: Joi.string().min(3).max(120).default('rfid.csrf_token'),
 
   DEFAULT_TENANT_NAME: Joi.string().min(2).max(120).default('Tech Souveraine'),
   DEFAULT_TENANT_DOMAIN: Joi.string().domain().default('techsouveraine.com'),

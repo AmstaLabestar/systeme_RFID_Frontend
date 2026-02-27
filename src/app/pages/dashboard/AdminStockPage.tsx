@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, Search } from 'lucide-react';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { read, utils } from 'xlsx';
+import readXlsxFile from 'read-excel-file/browser';
 import { useAuth, useI18n } from '@/app/contexts';
 import {
   adminService,
@@ -58,6 +58,29 @@ interface SystemPricingDraft {
 
 const MAC_ADDRESS_REGEX = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
 const GENERIC_IDENTIFIER_REGEX = /^[A-Z0-9][A-Z0-9:_-]{1,119}$/;
+
+function normalizeSpreadsheetCell(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return String(value).trim();
+}
+
+async function parseXlsxRows(file: File): Promise<string[][]> {
+  const rows = await readXlsxFile(file);
+  return rows
+    .map((row) =>
+      row
+        .map((entry) => normalizeSpreadsheetCell(entry))
+        .filter((entry) => entry.length > 0),
+    )
+    .filter((row) => row.length > 0);
+}
 
 function parseRows(text: string): AdminBulkDeviceItem[] {
   return text
@@ -678,27 +701,11 @@ export function AdminStockPage() {
       let content = '';
 
       if (lowerName.endsWith('.xlsx')) {
-        const workbook = read(await file.arrayBuffer(), { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        if (!firstSheetName) {
+        const normalizedRows = await parseXlsxRows(file);
+        if (normalizedRows.length === 0) {
           toast.error(t('adminStock.toast.xlsxNoSheet'));
           return;
         }
-
-        const sheet = workbook.Sheets[firstSheetName];
-        const rows = utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
-          header: 1,
-          raw: false,
-          defval: '',
-        });
-
-        const normalizedRows = rows
-          .map((row) =>
-            row
-              .map((entry) => String(entry ?? '').trim())
-              .filter((entry) => entry.length > 0),
-          )
-          .filter((row) => row.length > 0);
 
         const maybeHeader = normalizedRows[0]?.[0]?.toLowerCase() ?? '';
         const dataRows =
@@ -779,27 +786,11 @@ export function AdminStockPage() {
       let content = '';
 
       if (lowerName.endsWith('.xlsx')) {
-        const workbook = read(await file.arrayBuffer(), { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        if (!firstSheetName) {
+        const normalizedRows = await parseXlsxRows(file);
+        if (normalizedRows.length === 0) {
           toast.error(t('adminStock.toast.xlsxNoSheet'));
           return;
         }
-
-        const sheet = workbook.Sheets[firstSheetName];
-        const rows = utils.sheet_to_json<(string | number | boolean | null)[]>(sheet, {
-          header: 1,
-          raw: false,
-          defval: '',
-        });
-
-        const normalizedRows = rows
-          .map((row) =>
-            row
-              .map((entry) => String(entry ?? '').trim())
-              .filter((entry) => entry.length > 0),
-          )
-          .filter((row) => row.length > 0);
 
         const maybeHeader = normalizedRows[0]?.[0]?.toLowerCase() ?? '';
         const dataRows = maybeHeader.includes('mac') ? normalizedRows.slice(1) : normalizedRows;

@@ -3,3 +3,4 @@ export * from './DeviceHistoryDialog';
 export * from './EmptyState';
 export * from './MetricCard';
 export * from './PageHeader';
+export * from './AppErrorBoundary';
