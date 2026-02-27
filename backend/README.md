@@ -30,6 +30,8 @@ Detailed OWASP mapping: `backend/docs/security.md`.
    - `JWT_ACCESS_SECRET`
    - `JWT_REFRESH_SECRET`
    - `GOOGLE_CLIENT_ID`
+   - `TRUST_PROXY_HOPS` (set to `0` unless you run behind trusted reverse proxies)
+   - `DEFAULT_SIGNUP_ROLE_NAME` (recommended: `member`)
 3. For email delivery in production, set:
    - `EMAIL_PROVIDER=smtp`
    - `EMAIL_FROM`
@@ -38,6 +40,9 @@ Detailed OWASP mapping: `backend/docs/security.md`.
    - `SMTP_SECURE`
    - `SMTP_USER`
    - `SMTP_PASS`
+4. Optional (recommended for multi-instance deployments):
+   - `AUTH_ATTEMPT_REDIS_URL`
+   - `AUTH_ATTEMPT_REDIS_PREFIX`
 
 ## Setup
 

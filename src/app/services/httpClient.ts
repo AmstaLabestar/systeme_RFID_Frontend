@@ -1,18 +1,14 @@
-import axios, { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { AUTH_ROUTES } from './contracts';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4012';
-const AUTH_TOKEN_STORAGE_KEY = 'rfid.auth.token';
-const AUTH_REFRESH_TOKEN_STORAGE_KEY = 'rfid.auth.refreshToken';
-const AUTH_USER_STORAGE_KEY = 'rfid.auth.user';
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
   _skipAuthRefresh?: boolean;
-  _skipAuthHeader?: boolean;
 }
 
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, '');
@@ -25,47 +21,6 @@ function getAuthApiBaseUrl(): string {
 function getSystemApiBaseUrl(): string {
   const envBaseUrl = import.meta.env.VITE_SYSTEM_API_URL || import.meta.env.VITE_AUTH_API_URL;
   return normalizeBaseUrl(envBaseUrl || DEFAULT_API_BASE_URL);
-}
-
-function hasAuthorizationHeader(config: RetriableRequestConfig): boolean {
-  const headers = config.headers as Record<string, unknown> | undefined;
-  const authorization = headers?.Authorization ?? headers?.authorization;
-  return typeof authorization === 'string' && authorization.trim().length > 0;
-}
-
-function clearStoredSession(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  window.localStorage.removeItem(AUTH_REFRESH_TOKEN_STORAGE_KEY);
-  window.localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-}
-
-function readAuthTokens(payload: unknown): { accessToken: string | null; refreshToken: string | null } {
-  const source = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
-  const nested = typeof source.data === 'object' && source.data !== null
-    ? (source.data as Record<string, unknown>)
-    : {};
-
-  const accessCandidate =
-    nested.token ??
-    nested.accessToken ??
-    nested.access_token ??
-    source.token ??
-    source.accessToken ??
-    source.access_token;
-  const refreshCandidate =
-    nested.refreshToken ?? nested.refresh_token ?? source.refreshToken ?? source.refresh_token;
-
-  const accessToken = typeof accessCandidate === 'string' ? accessCandidate.trim() : '';
-  const refreshToken = typeof refreshCandidate === 'string' ? refreshCandidate.trim() : '';
-
-  return {
-    accessToken: accessToken || null,
-    refreshToken: refreshToken || null,
-  };
 }
 
 function extractApiMessage(payload: unknown): string | null {
@@ -99,46 +54,21 @@ function extractApiMessage(payload: unknown): string | null {
   return null;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const storedRefreshToken = window.localStorage.getItem(AUTH_REFRESH_TOKEN_STORAGE_KEY);
-  if (!storedRefreshToken) {
-    return null;
-  }
-
+async function refreshSessionCookie(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = axios
       .post(
         `${getAuthApiBaseUrl()}${AUTH_ROUTES.refresh}`,
-        { refreshToken: storedRefreshToken },
+        {},
         {
           headers: {
             'Content-Type': 'application/json',
           },
+          withCredentials: true,
         },
       )
-      .then((response) => {
-        const tokens = readAuthTokens(response.data);
-
-        if (!tokens.accessToken) {
-          clearStoredSession();
-          return null;
-        }
-
-        window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, tokens.accessToken);
-        if (tokens.refreshToken) {
-          window.localStorage.setItem(AUTH_REFRESH_TOKEN_STORAGE_KEY, tokens.refreshToken);
-        }
-
-        return tokens.accessToken;
-      })
-      .catch(() => {
-        clearStoredSession();
-        return null;
-      })
+      .then(() => true)
+      .catch(() => false)
       .finally(() => {
         refreshPromise = null;
       });
@@ -148,23 +78,6 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
-  client.interceptors.request.use((config) => {
-    const requestConfig = config as RetriableRequestConfig;
-    if (typeof window === 'undefined' || requestConfig._skipAuthHeader) {
-      return requestConfig;
-    }
-
-    const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    if (!token) {
-      return requestConfig;
-    }
-
-    const headers = AxiosHeaders.from(requestConfig.headers);
-    headers.set('Authorization', `Bearer ${token}`);
-    requestConfig.headers = headers;
-    return requestConfig;
-  });
-
   client.interceptors.response.use(
     (response) => response,
     async (error: unknown) => {
@@ -182,22 +95,17 @@ function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
         status !== 401 ||
         requestConfig._retry ||
         requestConfig._skipAuthRefresh ||
-        isRefreshRequest ||
-        !hasAuthorizationHeader(requestConfig)
+        isRefreshRequest
       ) {
         return Promise.reject(error);
       }
 
-      const refreshedAccessToken = await refreshAccessToken();
-      if (!refreshedAccessToken) {
+      const didRefresh = await refreshSessionCookie();
+      if (!didRefresh) {
         return Promise.reject(error);
       }
 
       requestConfig._retry = true;
-      const headers = AxiosHeaders.from(requestConfig.headers);
-      headers.set('Authorization', `Bearer ${refreshedAccessToken}`);
-      requestConfig.headers = headers;
-
       return client.request(requestConfig);
     },
   );
@@ -205,6 +113,7 @@ function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
 
 export const authApiClient = axios.create({
   baseURL: getAuthApiBaseUrl(),
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -212,6 +121,7 @@ export const authApiClient = axios.create({
 
 export const systemApiClient = axios.create({
   baseURL: getSystemApiBaseUrl(),
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },

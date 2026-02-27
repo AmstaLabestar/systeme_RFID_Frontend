@@ -89,8 +89,12 @@ export class AdminController {
   }
 
   @Get('logs')
-  listAdminLogs(@Query() query: ListAdminAuditQueryDto) {
+  listAdminLogs(
+    @CurrentUser() user: AccessTokenPayload,
+    @Query() query: ListAdminAuditQueryDto,
+  ) {
     return this.adminAuditService.listLogs({
+      tenantId: user.tenantId,
       page: query.page,
       limit: query.limit,
       action: query.action,

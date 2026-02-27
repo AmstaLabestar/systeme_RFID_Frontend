@@ -121,7 +121,7 @@ export class AuthService {
   private readonly otpMaxAttempts: number;
   private readonly defaultTenantName: string;
   private readonly defaultTenantDomain: string;
-  private readonly defaultRoleName: string;
+  private readonly defaultSignupRoleName: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -153,7 +153,7 @@ export class AuthService {
     this.otpMaxAttempts = this.configService.getOrThrow<number>('OTP_MAX_ATTEMPTS');
     this.defaultTenantName = this.configService.getOrThrow<string>('DEFAULT_TENANT_NAME');
     this.defaultTenantDomain = this.configService.getOrThrow<string>('DEFAULT_TENANT_DOMAIN');
-    this.defaultRoleName = this.configService.getOrThrow<string>('DEFAULT_ROLE_NAME');
+    this.defaultSignupRoleName = this.configService.getOrThrow<string>('DEFAULT_SIGNUP_ROLE_NAME');
 
     authenticator.options = {
       step: 30,
@@ -164,7 +164,7 @@ export class AuthService {
   async register(dto: RegisterDto, meta: RequestMeta): Promise<AuthResponseDto> {
     const normalizedEmail = normalizeEmail(dto.email);
     const attemptKey = `register:${meta.ipAddress ?? 'unknown'}:${normalizedEmail}`;
-    this.authAttemptService.assertWithinLimit(attemptKey, 5, 15 * 60_000);
+    await this.authAttemptService.assertWithinLimit(attemptKey, 5, 15 * 60_000);
 
     const normalizedPhone = dto.phoneNumber ? normalizePhone(dto.phoneNumber) : undefined;
     if (normalizedPhone && !isValidPhone(normalizedPhone)) {
@@ -177,19 +177,17 @@ export class AuthService {
     ]);
 
     if (existingByEmail) {
-      this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
       throw new ConflictException('Email already exists.');
     }
 
     if (existingByPhone) {
-      this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
       throw new ConflictException('Phone number already exists.');
     }
 
-    const { tenant, role } = await this.getOrCreateTenantAndRole({
+    const { tenant, role } = await this.getOrCreateSignupTenantAndRole({
       tenantName: dto.tenantName ?? dto.company,
-      tenantDomain: dto.tenantDomain,
-      roleName: dto.roleName,
     });
 
     const passwordHash = await bcrypt.hash(dto.password, this.bcryptSaltRounds);
@@ -203,7 +201,7 @@ export class AuthService {
       role: { connect: { id: role.id } },
     });
 
-    this.authAttemptService.reset(attemptKey);
+    await this.authAttemptService.reset(attemptKey);
     const tokens = await this.issueTokens(createdUser, meta);
     return this.toAuthResponse(createdUser, tokens, dto.redirectTo);
   }
@@ -214,19 +212,19 @@ export class AuthService {
   ): Promise<AuthResponseDto | LoginTwoFactorChallengeResponseDto> {
     const { user, key } = await this.findUserByLoginIdentifier(dto);
     const attemptKey = `login:${meta.ipAddress ?? 'unknown'}:${key}`;
-    this.authAttemptService.assertWithinLimit(attemptKey, 5, 15 * 60_000);
+    await this.authAttemptService.assertWithinLimit(attemptKey, 5, 15 * 60_000);
     if (!user?.passwordHash) {
-      this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatches) {
-      this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 15 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
-    this.authAttemptService.reset(attemptKey);
+    await this.authAttemptService.reset(attemptKey);
 
     if (user.isTwoFactorEnabled) {
       return this.createTwoFactorChallenge(user, dto.redirectTo);
@@ -241,7 +239,7 @@ export class AuthService {
     meta: RequestMeta,
   ): Promise<AuthResponseDto> {
     const attemptKey = `2fa-login:${meta.ipAddress ?? 'unknown'}`;
-    this.authAttemptService.assertWithinLimit(attemptKey, this.otpMaxAttempts, 10 * 60_000);
+    await this.authAttemptService.assertWithinLimit(attemptKey, this.otpMaxAttempts, 10 * 60_000);
 
     const payload = await this.verifyAccessToken(dto.twoFactorToken);
     if (payload.isTwoFactorAuthenticated) {
@@ -250,18 +248,18 @@ export class AuthService {
 
     const user = await this.usersRepository.findAuthById(payload.userId);
     if (!user || !user.isTwoFactorEnabled) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Two-factor verification failed.');
     }
 
     const secret = this.readTwoFactorSecret(user);
     const isValidCode = authenticator.check(dto.code, secret);
     if (!isValidCode) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Two-factor verification failed.');
     }
 
-    this.authAttemptService.reset(attemptKey);
+    await this.authAttemptService.reset(attemptKey);
     const tokens = await this.issueTokens(user, meta);
     return this.toAuthResponse(user, tokens, dto.redirectTo);
   }
@@ -296,7 +294,7 @@ export class AuthService {
   ): Promise<RequestMagicLinkResponseDto> {
     const normalizedEmail = normalizeEmail(dto.email);
     const attemptKey = `magic-link:${meta.ipAddress ?? 'unknown'}:${normalizedEmail}`;
-    this.authAttemptService.assertWithinLimit(attemptKey, 8, 15 * 60_000);
+    await this.authAttemptService.assertWithinLimit(attemptKey, 8, 15 * 60_000);
 
     const user = await this.getOrCreateMagicLinkUser(normalizedEmail);
     const jti = randomUUID();
@@ -333,7 +331,7 @@ export class AuthService {
       throw new InternalServerErrorException('Unable to send magic link.');
     }
 
-    this.authAttemptService.reset(attemptKey);
+    await this.authAttemptService.reset(attemptKey);
     return {
       success: true,
       message: 'If the email is valid, a magic link has been sent.',
@@ -345,7 +343,7 @@ export class AuthService {
     meta: RequestMeta,
   ): Promise<AuthResponseDto | LoginTwoFactorChallengeResponseDto> {
     const attemptKey = `magic-link-verify:${meta.ipAddress ?? 'unknown'}`;
-    this.authAttemptService.assertWithinLimit(attemptKey, this.otpMaxAttempts, 10 * 60_000);
+    await this.authAttemptService.assertWithinLimit(attemptKey, this.otpMaxAttempts, 10 * 60_000);
 
     const payload = await this.verifyMagicLinkToken(dto.token);
     const persistedToken = await this.magicLinkTokensRepository.findByJti(payload.jti);
@@ -357,24 +355,24 @@ export class AuthService {
       persistedToken.consumedAt !== null ||
       persistedToken.expiresAt.getTime() <= Date.now();
     if (isTokenInvalid) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
     // Atomic consume prevents token replay in concurrent requests.
     const consumed = await this.magicLinkTokensRepository.consumeIfActive(persistedToken.id);
     if (!consumed) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
     const user = await this.usersRepository.findAuthById(payload.userId);
     if (!user) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
-    this.authAttemptService.reset(attemptKey);
+    await this.authAttemptService.reset(attemptKey);
     const redirectTo = dto.redirectTo ?? payload.redirectTo;
 
     if (user.isTwoFactorEnabled) {
@@ -478,8 +476,12 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshTokenDto, meta: RequestMeta): Promise<AuthResponseDto> {
+    if (!dto.refreshToken) {
+      throw new BadRequestException('Refresh token is required.');
+    }
+
     const attemptKey = `refresh:${meta.ipAddress ?? 'unknown'}`;
-    this.authAttemptService.assertWithinLimit(attemptKey, 10, 10 * 60_000);
+    await this.authAttemptService.assertWithinLimit(attemptKey, 10, 10 * 60_000);
 
     const payload = await this.verifyRefreshToken(dto.refreshToken);
     const persistedToken = await this.refreshTokensRepository.findByJti(payload.jti);
@@ -490,19 +492,19 @@ export class AuthService {
       persistedToken.expiresAt.getTime() <= Date.now();
 
     if (isInvalid) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
     if (persistedToken.tokenHash !== hashToken(dto.refreshToken)) {
       await this.refreshTokensRepository.revokeById(persistedToken.id).catch(() => undefined);
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
     const user = await this.usersRepository.findAuthById(payload.sub);
     if (!user) {
-      this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
+      await this.authAttemptService.recordFailure(attemptKey, 10 * 60_000);
       throw new UnauthorizedException('Invalid authentication credentials.');
     }
 
@@ -512,7 +514,7 @@ export class AuthService {
       tokens.refreshTokenId,
     );
 
-    this.authAttemptService.reset(attemptKey);
+    await this.authAttemptService.reset(attemptKey);
     return this.toAuthResponse(user, tokens);
   }
 
@@ -589,7 +591,7 @@ export class AuthService {
       });
     }
 
-    const { tenant, role } = await this.getOrCreateTenantAndRole({});
+    const { tenant, role } = await this.getOrCreateSignupTenantAndRole();
     return this.usersRepository.create({
       name: normalizedName,
       email: normalizedEmail,
@@ -606,7 +608,7 @@ export class AuthService {
       return existing;
     }
 
-    const { tenant, role } = await this.getOrCreateTenantAndRole({});
+    const { tenant, role } = await this.getOrCreateSignupTenantAndRole();
     const fallbackName = this.resolveNameFromEmail(email);
 
     try {
@@ -632,11 +634,28 @@ export class AuthService {
     }
   }
 
-  private async getOrCreateTenantAndRole(params: {
+  private async getOrCreateSignupTenantAndRole(params: {
+    tenantName?: string;
+  } = {}): Promise<{ tenant: Tenant; role: Role }> {
+    const tenant = await this.getOrCreateTenant({
+      tenantName: params.tenantName,
+    });
+    const role = await this.getOrCreateRoleInTenant(
+      tenant.id,
+      this.defaultSignupRoleName,
+      [],
+    );
+
+    return {
+      tenant,
+      role,
+    };
+  }
+
+  private async getOrCreateTenant(params: {
     tenantName?: string;
     tenantDomain?: string;
-    roleName?: string;
-  }): Promise<{ tenant: Tenant; role: Role }> {
+  }): Promise<Tenant> {
     const tenantDomain = normalizeDomain(params.tenantDomain ?? this.defaultTenantDomain);
     const tenantName =
       sanitizeString(params.tenantName ?? this.defaultTenantName) || this.defaultTenantName;
@@ -649,23 +668,26 @@ export class AuthService {
       });
     }
 
-    const roleName =
-      sanitizeString(params.roleName ?? this.defaultRoleName).toLowerCase() ||
-      this.defaultRoleName;
-    let role = await this.rolesRepository.findByNameInTenant(tenant.id, roleName);
+    return tenant;
+  }
+
+  private async getOrCreateRoleInTenant(
+    tenantId: string,
+    roleName: string,
+    defaultPermissions: string[],
+  ): Promise<Role> {
+    const normalizedRoleName = sanitizeString(roleName).toLowerCase() || this.defaultSignupRoleName;
+    let role = await this.rolesRepository.findByNameInTenant(tenantId, normalizedRoleName);
 
     if (!role) {
       role = await this.rolesRepository.create({
-        name: roleName,
-        permissions: ['*'],
-        tenant: { connect: { id: tenant.id } },
+        name: normalizedRoleName,
+        permissions: defaultPermissions,
+        tenant: { connect: { id: tenantId } },
       });
     }
 
-    return {
-      tenant,
-      role,
-    };
+    return role;
   }
 
   private async createTwoFactorChallenge(

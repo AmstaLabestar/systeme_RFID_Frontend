@@ -20,6 +20,31 @@ export function sanitizeString(value: string): string {
   return value.replace(/[\u0000-\u001F\u007F]/g, '').replace(/[<>]/g, '').trim();
 }
 
+export function readCookieValue(
+  rawCookieHeader: string | undefined,
+  cookieName: string,
+): string | undefined {
+  if (!rawCookieHeader || !cookieName) {
+    return undefined;
+  }
+
+  const encodedName = `${encodeURIComponent(cookieName)}=`;
+  const plainName = `${cookieName}=`;
+  const cookiePairs = rawCookieHeader.split(';');
+
+  for (const pair of cookiePairs) {
+    const trimmedPair = pair.trim();
+    if (trimmedPair.startsWith(encodedName)) {
+      return decodeURIComponent(trimmedPair.slice(encodedName.length));
+    }
+    if (trimmedPair.startsWith(plainName)) {
+      return trimmedPair.slice(plainName.length);
+    }
+  }
+
+  return undefined;
+}
+
 export function sanitizeUnknown(value: unknown): unknown {
   if (typeof value === 'string') {
     return sanitizeString(value);

@@ -60,6 +60,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const prismaService = app.get(PrismaService);
+  const trustProxyHops = configService.getOrThrow<number>('TRUST_PROXY_HOPS');
+  const httpServer = app.getHttpAdapter().getInstance();
+  if (typeof httpServer?.set === 'function') {
+    httpServer.set('trust proxy', trustProxyHops);
+  }
 
   app.use(
     helmet({

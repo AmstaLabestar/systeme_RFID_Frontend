@@ -3,6 +3,7 @@ import * as Joi from 'joi';
 export const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
   PORT: Joi.number().integer().min(1).max(65535).default(4012),
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).max(5).default(0),
 
   DATABASE_URL: Joi.string().uri({ scheme: ['postgresql', 'postgres'] }).required(),
 
@@ -17,10 +18,20 @@ export const envValidationSchema = Joi.object({
   CORS_ALLOWED_ORIGINS: Joi.string().required(),
 
   BCRYPT_SALT_ROUNDS: Joi.number().integer().min(10).max(16).default(12),
+  AUTH_ATTEMPT_REDIS_URL: Joi.string()
+    .uri({ scheme: ['redis', 'rediss'] })
+    .allow('')
+    .optional(),
+  AUTH_ATTEMPT_REDIS_PREFIX: Joi.string().min(1).max(120).default('auth:attempt'),
+  AUTH_ATTEMPT_MAX_BUCKETS: Joi.number().integer().min(1000).max(200000).default(20000),
+  AUTH_ATTEMPT_CLEANUP_INTERVAL_MS: Joi.number().integer().min(10000).max(3600000).default(60000),
+  AUTH_ACCESS_COOKIE_NAME: Joi.string().min(3).max(120).default('rfid.access_token'),
+  AUTH_REFRESH_COOKIE_NAME: Joi.string().min(3).max(120).default('rfid.refresh_token'),
 
   DEFAULT_TENANT_NAME: Joi.string().min(2).max(120).default('Tech Souveraine'),
   DEFAULT_TENANT_DOMAIN: Joi.string().domain().default('techsouveraine.com'),
   DEFAULT_ROLE_NAME: Joi.string().min(2).max(60).default('owner'),
+  DEFAULT_SIGNUP_ROLE_NAME: Joi.string().min(2).max(60).default('member'),
 
   OTP_MAX_ATTEMPTS: Joi.number().integer().min(3).max(10).default(5),
   TOTP_ISSUER: Joi.string().min(2).max(120).default('RFID SaaS'),
