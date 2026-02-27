@@ -9,8 +9,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { PERMISSIONS } from '../../common/permissions.constants';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
 import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
@@ -35,7 +38,7 @@ import { ValidateDevicesImportDto } from './dto/validate-devices-import.dto';
 import { AdminAuditService } from './admin-audit.service';
 
 @Controller('admin')
-@UseGuards(JwtAuthGuard, TwoFactorAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, TwoFactorAuthGuard, RolesGuard, PermissionsGuard)
 @Roles('admin')
 export class AdminController {
   constructor(
@@ -48,11 +51,13 @@ export class AdminController {
   ) {}
 
   @Get('systems')
+  @Permissions(PERMISSIONS.admin.systemsRead)
   listSystems() {
     return this.inventoryService.listSystemsWithStock(true);
   }
 
   @Get('inventory/devices')
+  @Permissions(PERMISSIONS.admin.inventoryRead)
   listInventoryDevices(@Query() query: ListAdminInventoryQueryDto) {
     return this.inventoryService.listDeviceInventory({
       page: query.page,
@@ -66,16 +71,19 @@ export class AdminController {
   }
 
   @Get('inventory/devices/:id')
+  @Permissions(PERMISSIONS.admin.inventoryRead)
   getInventoryDevice(@Param('id') deviceId: string) {
     return this.inventoryService.getDeviceInventoryDetail(deviceId);
   }
 
   @Get('inventory/alerts/low-stock')
+  @Permissions(PERMISSIONS.admin.inventoryRead)
   listLowStockAlerts() {
     return this.inventoryService.listLowStockAlerts();
   }
 
   @Get('inventory/movements')
+  @Permissions(PERMISSIONS.admin.inventoryRead)
   listStockMovements(@Query() query: ListStockMovementsQueryDto) {
     return this.stockLedgerService.listMovements({
       page: query.page,
@@ -89,8 +97,13 @@ export class AdminController {
   }
 
   @Get('logs')
-  listAdminLogs(@Query() query: ListAdminAuditQueryDto) {
+  @Permissions(PERMISSIONS.admin.logsRead)
+  listAdminLogs(
+    @CurrentUser() user: AccessTokenPayload,
+    @Query() query: ListAdminAuditQueryDto,
+  ) {
     return this.adminAuditService.listLogs({
+      tenantId: user.tenantId,
       page: query.page,
       limit: query.limit,
       action: query.action,
@@ -100,11 +113,13 @@ export class AdminController {
   }
 
   @Get('webhooks')
+  @Permissions(PERMISSIONS.admin.webhooksRead)
   listWebhooks(@CurrentUser() user: AccessTokenPayload) {
     return this.outboxService.listWebhookEndpoints(user.tenantId);
   }
 
   @Post('webhooks')
+  @Permissions(PERMISSIONS.admin.webhooksManage)
   async createWebhook(
     @CurrentUser() user: AccessTokenPayload,
     @Body() dto: CreateWebhookEndpointDto,
@@ -132,6 +147,7 @@ export class AdminController {
   }
 
   @Patch('webhooks/:id/activation')
+  @Permissions(PERMISSIONS.admin.webhooksManage)
   async setWebhookActivation(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') webhookId: string,
@@ -157,6 +173,7 @@ export class AdminController {
   }
 
   @Post('webhooks/:id/test')
+  @Permissions(PERMISSIONS.admin.webhooksManage)
   async testWebhook(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') webhookId: string,
@@ -183,6 +200,7 @@ export class AdminController {
 
   @Post('systems')
   @Roles('admin')
+  @Permissions(PERMISSIONS.admin.systemsManage)
   async createSystem(
     @CurrentUser() user: AccessTokenPayload,
     @Body() dto: CreateBusinessSystemDto,
@@ -203,6 +221,7 @@ export class AdminController {
   }
 
   @Patch('systems/:id/activation')
+  @Permissions(PERMISSIONS.admin.systemsManage)
   async updateSystemActivation(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') systemId: string,
@@ -224,6 +243,7 @@ export class AdminController {
   }
 
   @Patch('systems/:id/pricing')
+  @Permissions(PERMISSIONS.admin.systemsManage)
   async updateSystemPricing(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') systemId: string,
@@ -247,6 +267,7 @@ export class AdminController {
   }
 
   @Post('systems/:id/devices/bulk')
+  @Permissions(PERMISSIONS.admin.stockManage)
   async createDevicesBulk(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') systemId: string,
@@ -295,6 +316,7 @@ export class AdminController {
   }
 
   @Post('systems/:id/devices/import/validate')
+  @Permissions(PERMISSIONS.admin.stockManage)
   validateDevicesImport(
     @Param('id') systemId: string,
     @Body() dto: ValidateDevicesImportDto,
@@ -308,6 +330,7 @@ export class AdminController {
   }
 
   @Post('systems/:id/identifiers/bulk')
+  @Permissions(PERMISSIONS.admin.stockManage)
   async createSystemIdentifiersBulk(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') systemId: string,
@@ -339,6 +362,7 @@ export class AdminController {
   }
 
   @Post('devices/:id/identifiers')
+  @Permissions(PERMISSIONS.admin.stockManage)
   async createDeviceIdentifiers(
     @CurrentUser() user: AccessTokenPayload,
     @Param('id') deviceId: string,

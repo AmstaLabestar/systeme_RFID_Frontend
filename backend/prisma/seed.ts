@@ -1,12 +1,30 @@
 import { HardwareSystemCode, IdentifierType, PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
+import { DEFAULT_ROLE_PERMISSIONS } from '../src/common/permissions.constants';
 
 const prisma = new PrismaClient();
+
+function normalizeRoleName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function readRolePermissions(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+}
 
 async function main() {
   const tenantName = process.env.DEFAULT_TENANT_NAME ?? 'Tech Souveraine';
   const tenantDomain = process.env.DEFAULT_TENANT_DOMAIN ?? 'techsouveraine.local';
   const roleName = process.env.DEFAULT_ROLE_NAME ?? 'owner';
+  const normalizedRoleName = normalizeRoleName(roleName);
+  const defaultRolePermissions = DEFAULT_ROLE_PERMISSIONS[normalizedRoleName] ?? ['*'];
   const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@techsouveraine.local';
   const adminName = process.env.SEED_ADMIN_NAME ?? 'Platform Admin';
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
@@ -25,16 +43,24 @@ async function main() {
     where: {
       tenantId_name: {
         tenantId: tenant.id,
-        name: roleName,
+        name: normalizedRoleName,
       },
     },
     update: {},
     create: {
       tenantId: tenant.id,
-      name: roleName,
-      permissions: ['*'],
+      name: normalizedRoleName,
+      permissions: defaultRolePermissions,
     },
   });
+
+  const currentRolePermissions = readRolePermissions(role.permissions);
+  if (currentRolePermissions.length === 0 && defaultRolePermissions.length > 0) {
+    await prisma.role.update({
+      where: { id: role.id },
+      data: { permissions: defaultRolePermissions },
+    });
+  }
 
   const passwordHash = await bcrypt.hash(adminPassword, saltRounds);
 

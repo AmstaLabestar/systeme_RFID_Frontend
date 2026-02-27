@@ -18,8 +18,6 @@ import type { MarketplaceStatePayload, ServicesStatePayload } from '@/app/servic
 type UnknownRecord = Record<string, unknown>;
 
 export interface NormalizedAuthResponse {
-  token: string;
-  refreshToken?: string;
   redirectTo?: string;
   user: AuthUser;
 }
@@ -474,45 +472,19 @@ export function toAuthResponse(value: unknown): NormalizedAuthResponse {
   const root = asRecord(value);
   const source = getPayloadSource(value);
   const data = asRecord(root.data);
-  const token = asString(
-    pickFirstDefined(
-      source.token,
-      source.access_token,
-      source.accessToken,
-      data.token,
-      data.access_token,
-      data.accessToken,
-      root.token,
-      root.access_token,
-      root.accessToken,
-    ),
-    '',
-  );
   const userSource = asRecord(
     pickFirstDefined(source.user, source.profile, data.user, root.user, root.profile),
   );
   const user = toAuthUser(userSource);
-  const refreshToken = asOptionalString(
-    pickFirstDefined(
-      source.refreshToken,
-      source.refresh_token,
-      data.refreshToken,
-      data.refresh_token,
-      root.refreshToken,
-      root.refresh_token,
-    ),
-  );
   const redirectTo = asOptionalString(
     pickFirstDefined(source.redirectTo, source.redirect_to, data.redirectTo, root.redirectTo),
   );
 
-  if (!token || !user.id) {
+  if (!user.id) {
     throw new Error('Reponse auth invalide.');
   }
 
   return {
-    token,
-    refreshToken,
     redirectTo,
     user,
   };

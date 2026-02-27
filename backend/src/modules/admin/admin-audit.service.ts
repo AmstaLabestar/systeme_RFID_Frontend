@@ -11,6 +11,7 @@ interface CreateAdminAuditLogInput {
 }
 
 interface ListAdminAuditLogsInput {
+  tenantId: string;
   page: number;
   limit: number;
   action?: string;
@@ -37,6 +38,9 @@ export class AdminAuditService {
 
   async listLogs(input: ListAdminAuditLogsInput) {
     const where: Prisma.AdminActionLogWhereInput = {
+      actor: {
+        tenantId: input.tenantId,
+      },
       ...(input.action ? { action: input.action } : {}),
       ...(input.targetType ? { targetType: input.targetType } : {}),
       ...(input.actorId ? { actorId: input.actorId } : {}),

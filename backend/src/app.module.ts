@@ -1,7 +1,10 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { CsrfProtectionMiddleware } from './common/middleware/csrf-protection.middleware';
+import { RequestLoggingMiddleware } from './common/middleware/request-logging.middleware';
 import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -10,9 +13,11 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommonModule } from './modules/common/common.module';
 import { DevicesModule } from './modules/devices/devices.module';
+import { HealthModule } from './modules/health/health.module';
 import { IdentifiersModule } from './modules/identifiers/identifiers.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { ObservabilityModule } from './modules/observability/observability.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PublicFeedbackModule } from './modules/public-feedback/public-feedback.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -35,6 +40,7 @@ import { UsersModule } from './modules/users/users.module';
         limit: 120,
       },
     ]),
+    ObservabilityModule,
     PrismaModule,
     CommonModule,
     TenantsModule,
@@ -48,6 +54,7 @@ import { UsersModule } from './modules/users/users.module';
     AllocationsModule,
     MarketplaceModule,
     DevicesModule,
+    HealthModule,
     AdminModule,
     AccessModule,
     PublicFeedbackModule,
@@ -59,4 +66,14 @@ import { UsersModule } from './modules/users/users.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(
+        CorrelationIdMiddleware,
+        RequestLoggingMiddleware,
+        CsrfProtectionMiddleware,
+      )
+      .forRoutes('*');
+  }
+}

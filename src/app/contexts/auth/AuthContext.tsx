@@ -17,7 +17,6 @@ import {
 
 interface AuthContextValue {
   user: AuthUser | null;
-  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (payload: SignInPayload) => Promise<AuthResponse | SignInTwoFactorChallenge>;
@@ -32,81 +31,40 @@ interface AuthContextValue {
   signOut: () => void;
 }
 
-const STORAGE_TOKEN_KEY = 'rfid.auth.token';
-const STORAGE_REFRESH_TOKEN_KEY = 'rfid.auth.refreshToken';
-const STORAGE_USER_KEY = 'rfid.auth.user';
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const clearSession = useCallback(() => {
-    setToken(null);
     setUser(null);
-    window.localStorage.removeItem(STORAGE_TOKEN_KEY);
-    window.localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
-    window.localStorage.removeItem(STORAGE_USER_KEY);
     queryClient.clear();
   }, [queryClient]);
 
   const persistSession = useCallback((response: AuthResponse) => {
     queryClient.clear();
-    setToken(response.token);
     setUser(response.user);
-    window.localStorage.setItem(STORAGE_TOKEN_KEY, response.token);
-    window.localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(response.user));
-
-    if (response.refreshToken) {
-      window.localStorage.setItem(STORAGE_REFRESH_TOKEN_KEY, response.refreshToken);
-    } else {
-      window.localStorage.removeItem(STORAGE_REFRESH_TOKEN_KEY);
-    }
   }, [queryClient]);
 
   useEffect(() => {
     let isMounted = true;
 
     const hydrateSession = async () => {
-      const rawToken = window.localStorage.getItem(STORAGE_TOKEN_KEY);
-      const rawRefreshToken = window.localStorage.getItem(STORAGE_REFRESH_TOKEN_KEY);
-
-      if (!rawToken) {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-        return;
-      }
-
       try {
-        const sessionUser = await authService.getSession(rawToken);
+        const sessionUser = await authService.getSession();
 
         if (!isMounted) {
           return;
         }
 
-        setToken(rawToken);
         setUser(sessionUser);
-        window.localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(sessionUser));
-      } catch (error) {
+      } catch {
         if (!isMounted) {
           return;
         }
-
-        if (!rawRefreshToken) {
-          clearSession();
-          return;
-        }
-
-        try {
-          const refreshed = await authService.refresh(rawRefreshToken);
-          persistSession(refreshed);
-        } catch {
-          clearSession();
-        }
+        clearSession();
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -119,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [clearSession, persistSession]);
+  }, [clearSession]);
 
   const signIn = useCallback(
     async (payload: SignInPayload) => {
@@ -179,22 +137,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
-    const currentToken = token;
-    const currentRefreshToken = window.localStorage.getItem(STORAGE_REFRESH_TOKEN_KEY) || undefined;
-
-    if (currentToken) {
-      void authService.logout(currentToken, currentRefreshToken).catch(() => undefined);
-    }
-
+    void authService.logout().catch(() => undefined);
     clearSession();
-  }, [clearSession, token]);
+  }, [clearSession]);
 
   const value = useMemo(
     () => ({
       user,
-      token,
       isLoading,
-      isAuthenticated: Boolean(user && token),
+      isAuthenticated: Boolean(user),
       signIn,
       verifySignInTwoFactor,
       signUp,
@@ -206,7 +157,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       user,
-      token,
       isLoading,
       signIn,
       verifySignInTwoFactor,

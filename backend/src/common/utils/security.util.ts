@@ -4,10 +4,21 @@ import {
   createHash,
   randomBytes,
   randomInt,
+  randomUUID,
 } from 'crypto';
 
 const PHONE_REGEX = /^\+?[1-9]\d{7,14}$/;
 const ALLOWED_REDIRECT_PREFIX = '/dashboard';
+const DANGEROUS_OBJECT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+const CORRELATION_ID_REGEX = /^[A-Za-z0-9._:-]{8,128}$/;
+
+function decodeCookieComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 export interface EncryptedSecretPayload {
   encrypted: string;
@@ -18,6 +29,31 @@ export interface EncryptedSecretPayload {
 
 export function sanitizeString(value: string): string {
   return value.replace(/[\u0000-\u001F\u007F]/g, '').replace(/[<>]/g, '').trim();
+}
+
+export function readCookieValue(
+  rawCookieHeader: string | undefined,
+  cookieName: string,
+): string | undefined {
+  if (!rawCookieHeader || !cookieName) {
+    return undefined;
+  }
+
+  const encodedName = `${encodeURIComponent(cookieName)}=`;
+  const plainName = `${cookieName}=`;
+  const cookiePairs = rawCookieHeader.split(';');
+
+  for (const pair of cookiePairs) {
+    const trimmedPair = pair.trim();
+    if (trimmedPair.startsWith(encodedName)) {
+      return decodeCookieComponent(trimmedPair.slice(encodedName.length));
+    }
+    if (trimmedPair.startsWith(plainName)) {
+      return trimmedPair.slice(plainName.length);
+    }
+  }
+
+  return undefined;
 }
 
 export function sanitizeUnknown(value: unknown): unknown {
@@ -31,7 +67,9 @@ export function sanitizeUnknown(value: unknown): unknown {
 
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizeUnknown(entry)]),
+      Object.entries(value)
+        .filter(([key]) => !DANGEROUS_OBJECT_KEYS.has(key))
+        .map(([key, entry]) => [key, sanitizeUnknown(entry)]),
     );
   }
 
@@ -48,6 +86,14 @@ export function normalizePhone(phone: string): string {
 
 export function isValidPhone(phone: string): boolean {
   return PHONE_REGEX.test(phone);
+}
+
+export function resolveCorrelationId(candidate?: string): string {
+  const normalized = sanitizeString(candidate ?? '').slice(0, 128);
+  if (CORRELATION_ID_REGEX.test(normalized)) {
+    return normalized;
+  }
+  return randomUUID();
 }
 
 export function hashToken(token: string): string {

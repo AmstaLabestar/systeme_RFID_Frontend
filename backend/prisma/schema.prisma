@@ -123,6 +123,7 @@ model Role {
 
   @@unique([tenantId, name])
   @@index([name])
+  @@index([tenantId, createdAt])
   @@map("roles")
 }
 
@@ -163,6 +164,7 @@ model User {
   @@index([phoneNumber])
   @@index([googleId])
   @@index([tenantId, roleId])
+  @@index([tenantId, createdAt])
   @@map("users")
 }
 
@@ -262,6 +264,7 @@ model Device {
   @@index([warehouseCode])
   @@index([reservationExpiresAt])
   @@index([status, reservationExpiresAt])
+  @@index([status, createdAt])
   @@index([systemId, status])
   @@index([systemId, warehouseCode, status])
   @@map("devices")
@@ -461,12 +464,14 @@ model StockMovement {
 
   @@index([resourceType, resourceId])
   @@index([systemId, action])
+  @@index([systemId, createdAt])
   @@index([deviceId])
   @@index([identifierId])
   @@index([orderId])
   @@index([actorId])
   @@index([ownerId])
   @@index([warehouseCode])
+  @@index([warehouseCode, createdAt])
   @@index([createdAt])
   @@map("stock_movements")
 }
@@ -495,6 +500,7 @@ model OutboxEvent {
 
   @@index([eventType, status])
   @@index([status, availableAt])
+  @@index([status, availableAt, createdAt])
   @@index([aggregateType, aggregateId])
   @@index([tenantId])
   @@index([systemId])
@@ -522,6 +528,8 @@ model WebhookEndpoint {
 
   @@index([isActive])
   @@index([tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, isActive, createdAt])
   @@map("webhook_endpoints")
 }
 
@@ -536,6 +544,8 @@ model AdminActionLog {
   createdAt  DateTime @default(now())
 
   @@index([actorId])
+  @@index([actorId, createdAt])
   @@index([targetType, targetId])
+  @@index([targetType, targetId, createdAt])
   @@map("admin_action_logs")
 }

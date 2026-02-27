@@ -2,17 +2,14 @@ import axios, { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from
 import { AUTH_ROUTES } from './contracts';
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4012';
-const AUTH_TOKEN_STORAGE_KEY = 'rfid.auth.token';
-const AUTH_REFRESH_TOKEN_STORAGE_KEY = 'rfid.auth.refreshToken';
-const AUTH_USER_STORAGE_KEY = 'rfid.auth.user';
+const DEFAULT_CSRF_COOKIE_NAME = 'rfid.csrf_token';
 
 interface RetriableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
   _skipAuthRefresh?: boolean;
-  _skipAuthHeader?: boolean;
 }
 
-let refreshPromise: Promise<string | null> | null = null;
+let refreshPromise: Promise<boolean> | null = null;
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, '');
@@ -27,45 +24,34 @@ function getSystemApiBaseUrl(): string {
   return normalizeBaseUrl(envBaseUrl || DEFAULT_API_BASE_URL);
 }
 
-function hasAuthorizationHeader(config: RetriableRequestConfig): boolean {
-  const headers = config.headers as Record<string, unknown> | undefined;
-  const authorization = headers?.Authorization ?? headers?.authorization;
-  return typeof authorization === 'string' && authorization.trim().length > 0;
+function getCsrfCookieName(): string {
+  const configuredName = import.meta.env.VITE_AUTH_CSRF_COOKIE_NAME;
+  if (typeof configuredName === 'string' && configuredName.trim().length > 0) {
+    return configuredName.trim();
+  }
+  return DEFAULT_CSRF_COOKIE_NAME;
 }
 
-function clearStoredSession(): void {
-  if (typeof window === 'undefined') {
-    return;
+function readCookieValue(cookieName: string): string | null {
+  if (typeof document === 'undefined' || !document.cookie) {
+    return null;
   }
 
-  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  window.localStorage.removeItem(AUTH_REFRESH_TOKEN_STORAGE_KEY);
-  window.localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-}
+  const encodedName = `${encodeURIComponent(cookieName)}=`;
+  const plainName = `${cookieName}=`;
+  const cookieParts = document.cookie.split(';');
 
-function readAuthTokens(payload: unknown): { accessToken: string | null; refreshToken: string | null } {
-  const source = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
-  const nested = typeof source.data === 'object' && source.data !== null
-    ? (source.data as Record<string, unknown>)
-    : {};
+  for (const part of cookieParts) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(encodedName)) {
+      return decodeURIComponent(trimmed.slice(encodedName.length));
+    }
+    if (trimmed.startsWith(plainName)) {
+      return trimmed.slice(plainName.length);
+    }
+  }
 
-  const accessCandidate =
-    nested.token ??
-    nested.accessToken ??
-    nested.access_token ??
-    source.token ??
-    source.accessToken ??
-    source.access_token;
-  const refreshCandidate =
-    nested.refreshToken ?? nested.refresh_token ?? source.refreshToken ?? source.refresh_token;
-
-  const accessToken = typeof accessCandidate === 'string' ? accessCandidate.trim() : '';
-  const refreshToken = typeof refreshCandidate === 'string' ? refreshCandidate.trim() : '';
-
-  return {
-    accessToken: accessToken || null,
-    refreshToken: refreshToken || null,
-  };
+  return null;
 }
 
 function extractApiMessage(payload: unknown): string | null {
@@ -99,46 +85,21 @@ function extractApiMessage(payload: unknown): string | null {
   return null;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const storedRefreshToken = window.localStorage.getItem(AUTH_REFRESH_TOKEN_STORAGE_KEY);
-  if (!storedRefreshToken) {
-    return null;
-  }
-
+async function refreshSessionCookie(): Promise<boolean> {
   if (!refreshPromise) {
     refreshPromise = axios
       .post(
         `${getAuthApiBaseUrl()}${AUTH_ROUTES.refresh}`,
-        { refreshToken: storedRefreshToken },
+        {},
         {
           headers: {
             'Content-Type': 'application/json',
           },
+          withCredentials: true,
         },
       )
-      .then((response) => {
-        const tokens = readAuthTokens(response.data);
-
-        if (!tokens.accessToken) {
-          clearStoredSession();
-          return null;
-        }
-
-        window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, tokens.accessToken);
-        if (tokens.refreshToken) {
-          window.localStorage.setItem(AUTH_REFRESH_TOKEN_STORAGE_KEY, tokens.refreshToken);
-        }
-
-        return tokens.accessToken;
-      })
-      .catch(() => {
-        clearStoredSession();
-        return null;
-      })
+      .then(() => true)
+      .catch(() => false)
       .finally(() => {
         refreshPromise = null;
       });
@@ -148,20 +109,26 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
-  client.interceptors.request.use((config) => {
-    const requestConfig = config as RetriableRequestConfig;
-    if (typeof window === 'undefined' || requestConfig._skipAuthHeader) {
+  client.interceptors.request.use((requestConfig) => {
+    const method = (requestConfig.method || 'get').toUpperCase();
+    const isMutatingMethod =
+      method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+
+    if (!isMutatingMethod) {
       return requestConfig;
     }
 
-    const token = window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-    if (!token) {
+    const csrfToken = readCookieValue(getCsrfCookieName());
+    if (!csrfToken) {
       return requestConfig;
     }
 
     const headers = AxiosHeaders.from(requestConfig.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    if (!headers.has('x-csrf-token')) {
+      headers.set('x-csrf-token', csrfToken);
+    }
     requestConfig.headers = headers;
+
     return requestConfig;
   });
 
@@ -182,22 +149,17 @@ function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
         status !== 401 ||
         requestConfig._retry ||
         requestConfig._skipAuthRefresh ||
-        isRefreshRequest ||
-        !hasAuthorizationHeader(requestConfig)
+        isRefreshRequest
       ) {
         return Promise.reject(error);
       }
 
-      const refreshedAccessToken = await refreshAccessToken();
-      if (!refreshedAccessToken) {
+      const didRefresh = await refreshSessionCookie();
+      if (!didRefresh) {
         return Promise.reject(error);
       }
 
       requestConfig._retry = true;
-      const headers = AxiosHeaders.from(requestConfig.headers);
-      headers.set('Authorization', `Bearer ${refreshedAccessToken}`);
-      requestConfig.headers = headers;
-
       return client.request(requestConfig);
     },
   );
@@ -205,6 +167,7 @@ function attachAuthInterceptors(client: ReturnType<typeof axios.create>): void {
 
 export const authApiClient = axios.create({
   baseURL: getAuthApiBaseUrl(),
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -212,6 +175,7 @@ export const authApiClient = axios.create({
 
 export const systemApiClient = axios.create({
   baseURL: getSystemApiBaseUrl(),
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },

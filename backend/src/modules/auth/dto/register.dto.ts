@@ -8,7 +8,6 @@ import {
   MinLength,
 } from 'class-validator';
 import {
-  normalizeDomain,
   normalizeEmail,
   normalizePhone,
   sanitizeString,
@@ -58,17 +57,6 @@ export class RegisterDto {
   @IsString()
   @Length(2, 120)
   tenantName?: string;
-
-  @IsOptional()
-  @Transform(({ value }) => normalizeDomain(String(value)))
-  @Matches(/^[a-z0-9.-]+\.[a-z]{2,}$/i, { message: 'Invalid tenant domain.' })
-  tenantDomain?: string;
-
-  @IsOptional()
-  @Transform(({ value }) => sanitizeString(String(value)).toLowerCase())
-  @IsString()
-  @Length(2, 60)
-  roleName?: string;
 
   @IsOptional()
   @Transform(({ value }) => sanitizeString(String(value)))
