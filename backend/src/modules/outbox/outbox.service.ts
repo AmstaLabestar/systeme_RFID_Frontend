@@ -19,6 +19,7 @@ import { promises as dns } from 'dns';
 import { isIP } from 'net';
 import { decryptSecret, encryptSecret, hashToken } from '../../common/utils/security.util';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { MetricsService } from '../observability/metrics.service';
 
 interface EnqueueOutboxEventInput {
   eventType: OutboxEventType;
@@ -172,6 +173,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly metricsService: MetricsService,
   ) {
     this.dispatchIntervalMs = Number(
       this.configService.get('OUTBOX_DISPATCH_INTERVAL_MS') ?? 15000,
@@ -365,6 +367,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown error';
       this.logger.error(`Outbox dispatch failure: ${message}`);
+      this.metricsService.recordOutboxDispatchFailure();
     } finally {
       this.dispatchInProgress = false;
     }
@@ -516,6 +519,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
           },
         },
       });
+      this.metricsService.recordOutboxWebhookFailure();
       throw error;
     } finally {
       clearTimeout(timeout);

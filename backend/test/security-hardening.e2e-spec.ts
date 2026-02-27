@@ -15,6 +15,7 @@ function ensureE2eEnv(): void {
   process.env.NODE_ENV = process.env.NODE_ENV ?? 'test';
   process.env.PORT = process.env.PORT ?? '4012';
   process.env.TRUST_PROXY_HOPS = process.env.TRUST_PROXY_HOPS ?? '0';
+  process.env.METRICS_ENABLED = process.env.METRICS_ENABLED ?? 'true';
   process.env.DATABASE_URL =
     process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/rfid_saas?schema=public';
   process.env.JWT_ACCESS_SECRET =
@@ -423,6 +424,14 @@ describe('Security hardening e2e', () => {
     expect(typeof headerValue).toBe('string');
     expect(headerValue).not.toBe('<invalid>');
     expect(String(headerValue)).toMatch(/^[A-Za-z0-9._:-]{8,128}$/);
+  });
+
+  it('exposes prometheus metrics endpoint when enabled', async () => {
+    const response = await request(app.getHttpServer()).get('/metrics').expect(200);
+
+    expect(response.text).toContain('# HELP rfid_http_requests_total');
+    expect(response.text).toContain('rfid_process_uptime_seconds');
+    expect(String(response.headers['content-type'] ?? '')).toContain('text/plain');
   });
 
   it('rejects webhook URLs containing embedded credentials', async () => {

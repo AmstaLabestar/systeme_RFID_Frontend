@@ -17,6 +17,7 @@ import { HealthModule } from './modules/health/health.module';
 import { IdentifiersModule } from './modules/identifiers/identifiers.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { ObservabilityModule } from './modules/observability/observability.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PublicFeedbackModule } from './modules/public-feedback/public-feedback.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -39,6 +40,7 @@ import { UsersModule } from './modules/users/users.module';
         limit: 120,
       },
     ]),
+    ObservabilityModule,
     PrismaModule,
     CommonModule,
     TenantsModule,
