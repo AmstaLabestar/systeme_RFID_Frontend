@@ -26,6 +26,7 @@ This backend applies defensive controls aligned to OWASP Top 10 (2021):
 - `helmet` secure headers.
 - CORS allowlist from environment.
 - Strong env validation for secrets and auth config.
+- `/metrics` can be protected with basic authentication (`METRICS_AUTH_MODE=basic`) and should be restricted at reverse proxy/network layer in production.
 
 6. `A06 Vulnerable and Outdated Components`
 - Dedicated backend package with explicit dependencies.

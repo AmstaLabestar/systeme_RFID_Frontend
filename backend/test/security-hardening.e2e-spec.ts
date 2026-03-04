@@ -4,7 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { type Role, type Tenant, type User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createServer, type Server } from 'http';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { SanitizeBodyPipe } from '../src/common/pipes/sanitize-body.pipe';
@@ -16,6 +16,9 @@ function ensureE2eEnv(): void {
   process.env.PORT = process.env.PORT ?? '4012';
   process.env.TRUST_PROXY_HOPS = process.env.TRUST_PROXY_HOPS ?? '0';
   process.env.METRICS_ENABLED = process.env.METRICS_ENABLED ?? 'true';
+  process.env.METRICS_AUTH_MODE = process.env.METRICS_AUTH_MODE ?? 'none';
+  process.env.METRICS_BASIC_AUTH_USERNAME = process.env.METRICS_BASIC_AUTH_USERNAME ?? '';
+  process.env.METRICS_BASIC_AUTH_PASSWORD = process.env.METRICS_BASIC_AUTH_PASSWORD ?? '';
   process.env.DATABASE_URL =
     process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/rfid_saas?schema=public';
   process.env.JWT_ACCESS_SECRET =
@@ -32,6 +35,7 @@ function ensureE2eEnv(): void {
     process.env.DASHBOARD_REDIRECT_URL ?? 'http://localhost:5173/dashboard/overview';
   process.env.CORS_ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS ?? 'http://localhost:5173';
   process.env.BCRYPT_SALT_ROUNDS = process.env.BCRYPT_SALT_ROUNDS ?? '12';
+  process.env.REGISTER_MIN_RESPONSE_MS = process.env.REGISTER_MIN_RESPONSE_MS ?? '300';
   process.env.AUTH_ATTEMPT_REDIS_URL = process.env.AUTH_ATTEMPT_REDIS_URL ?? '';
   process.env.AUTH_ATTEMPT_REDIS_PREFIX =
     process.env.AUTH_ATTEMPT_REDIS_PREFIX ?? 'auth:attempt';
@@ -80,6 +84,13 @@ function extractCookieValue(
   return cookiePair.slice(cookiePrefix.length);
 }
 
+function createRandomPhoneNumber(): string {
+  const digits = Array.from(randomBytes(10))
+    .map((value) => String(value % 10))
+    .join('');
+  return `+1${digits}`;
+}
+
 describe('Security hardening e2e', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -95,6 +106,7 @@ describe('Security hardening e2e', () => {
   let fallbackOwnerUser: User;
   let memberUser: User;
   let cookieSessionUser: User;
+  let registerProbeUser: User;
   let memberPassword = '';
   let cookieSessionPassword = '';
   let adminAccessToken = '';
@@ -218,6 +230,19 @@ describe('Security hardening e2e', () => {
       },
     });
 
+    const registerProbePassword = 'StrongPass#789';
+    const registerProbePasswordHash = await bcrypt.hash(registerProbePassword, 12);
+    registerProbeUser = await prisma.user.create({
+      data: {
+        name: 'Security Register Probe',
+        email: `security-register-probe-${randomUUID().slice(0, 8)}@rfid-e2e.local`,
+        phoneNumber: createRandomPhoneNumber(),
+        passwordHash: registerProbePasswordHash,
+        roleId: memberRole.id,
+        tenantId: tenant.id,
+      },
+    });
+
     adminAccessToken = await jwtService.signAsync(
       {
         userId: adminUser.id,
@@ -236,7 +261,7 @@ describe('Security hardening e2e', () => {
     await prisma.adminActionLog.deleteMany({
       where: {
         actorId: {
-          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id].filter(
+          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id, registerProbeUser?.id].filter(
             (value): value is string => Boolean(value),
           ),
         },
@@ -258,7 +283,7 @@ describe('Security hardening e2e', () => {
     await prisma.refreshToken.deleteMany({
       where: {
         userId: {
-          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id].filter(
+          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id, registerProbeUser?.id].filter(
             (value): value is string => Boolean(value),
           ),
         },
@@ -268,7 +293,7 @@ describe('Security hardening e2e', () => {
     await prisma.magicLinkToken.deleteMany({
       where: {
         userId: {
-          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id].filter(
+          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id, registerProbeUser?.id].filter(
             (value): value is string => Boolean(value),
           ),
         },
@@ -278,7 +303,7 @@ describe('Security hardening e2e', () => {
     await prisma.user.deleteMany({
       where: {
         id: {
-          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id].filter(
+          in: [adminUser?.id, ownerUser?.id, fallbackOwnerUser?.id, memberUser?.id, cookieSessionUser?.id, registerProbeUser?.id].filter(
             (value): value is string => Boolean(value),
           ),
         },
@@ -317,6 +342,39 @@ describe('Security hardening e2e', () => {
     }
 
     await request(app.getHttpServer()).post('/auth/signin').send(payload).expect(429);
+  });
+
+  it('returns the same conflict status and message for existing email and existing phone on signup', async () => {
+    const emailConflictPayload = {
+      firstName: 'Probe',
+      lastName: 'Email',
+      company: 'RFID E2E',
+      email: registerProbeUser.email,
+      phoneNumber: createRandomPhoneNumber(),
+      password: 'StrongPass#901',
+    };
+    const phoneConflictPayload = {
+      firstName: 'Probe',
+      lastName: 'Phone',
+      company: 'RFID E2E',
+      email: `security-register-new-${randomUUID().slice(0, 8)}@rfid-e2e.local`,
+      phoneNumber: registerProbeUser.phoneNumber ?? createRandomPhoneNumber(),
+      password: 'StrongPass#901',
+    };
+
+    const emailConflictResponse = await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(emailConflictPayload)
+      .expect(409);
+    const phoneConflictResponse = await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(phoneConflictPayload)
+      .expect(409);
+
+    expect(emailConflictResponse.body.statusCode).toBe(409);
+    expect(phoneConflictResponse.body.statusCode).toBe(409);
+    expect(phoneConflictResponse.body.message).toBe(emailConflictResponse.body.message);
+    expect(phoneConflictResponse.body.error).toBe(emailConflictResponse.body.error);
   });
 
   it('enforces permission scope even for allowed role names', async () => {
@@ -427,7 +485,17 @@ describe('Security hardening e2e', () => {
   });
 
   it('exposes prometheus metrics endpoint when enabled', async () => {
-    const response = await request(app.getHttpServer()).get('/metrics').expect(200);
+    const metricsRequest = request(app.getHttpServer()).get('/metrics');
+    const metricsAuthMode = (process.env.METRICS_AUTH_MODE ?? 'none').toLowerCase();
+
+    if (metricsAuthMode === 'basic') {
+      metricsRequest.auth(
+        process.env.METRICS_BASIC_AUTH_USERNAME ?? '',
+        process.env.METRICS_BASIC_AUTH_PASSWORD ?? '',
+      );
+    }
+
+    const response = await metricsRequest.expect(200);
 
     expect(response.text).toContain('# HELP rfid_http_requests_total');
     expect(response.text).toContain('rfid_process_uptime_seconds');

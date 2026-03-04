@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { DeviceStatus, HardwareSystemCode, IdentifierType } from '@prisma/client';
+import { DeviceStatus, HardwareSystemCode, IdentifierType, Prisma } from '@prisma/client';
 import { AssignIdentifierDto } from './dto/assign-identifier.dto';
+import { GetServicesStateQueryDto } from './dto/get-services-state-query.dto';
+import type { GetServicesStateResponseDto } from './dto/get-services-state-response.dto';
 import { ReassignIdentifierDto } from './dto/reassign-identifier.dto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 
@@ -77,25 +79,86 @@ function normalizeEmployeeName(firstName: string, lastName: string): {
 export class AccessService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getServicesState(userId: string) {
-    const [employees, assignments, historyEvents, feedbackEvents] = await Promise.all([
-      this.prisma.employee.findMany({
-        where: { ownerId: userId },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.serviceAssignment.findMany({
-        where: { ownerId: userId },
-        orderBy: { updatedAt: 'desc' },
-      }),
-      this.prisma.serviceHistoryEvent.findMany({
-        where: { ownerId: userId },
-        orderBy: { occurredAt: 'desc' },
-      }),
-      this.prisma.feedbackEvent.findMany({
-        where: { ownerId: userId },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
+  async getServicesState(
+    userId: string,
+    query: GetServicesStateQueryDto = new GetServicesStateQueryDto(),
+  ): Promise<GetServicesStateResponseDto> {
+    const paginate = query.paginate;
+    const employeesTake = paginate ? query.employeesLimit + 1 : undefined;
+    const assignmentsTake = paginate ? query.assignmentsLimit + 1 : undefined;
+    const historyTake = paginate ? query.historyLimit + 1 : undefined;
+    const feedbackTake = paginate ? query.feedbackLimit + 1 : undefined;
+
+    const [rawEmployees, rawAssignments, rawHistoryEvents, rawFeedbackEvents] = await (async () => {
+      try {
+        return await Promise.all([
+          this.prisma.employee.findMany({
+            where: { ownerId: userId },
+            ...(paginate && query.employeesCursor
+              ? {
+                  cursor: { id: query.employeesCursor },
+                  skip: 1,
+                }
+              : {}),
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            ...(employeesTake ? { take: employeesTake } : {}),
+          }),
+          this.prisma.serviceAssignment.findMany({
+            where: { ownerId: userId },
+            ...(paginate && query.assignmentsCursor
+              ? {
+                  cursor: { id: query.assignmentsCursor },
+                  skip: 1,
+                }
+              : {}),
+            orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+            ...(assignmentsTake ? { take: assignmentsTake } : {}),
+          }),
+          this.prisma.serviceHistoryEvent.findMany({
+            where: { ownerId: userId },
+            ...(paginate && query.historyCursor
+              ? {
+                  cursor: { id: query.historyCursor },
+                  skip: 1,
+                }
+              : {}),
+            orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+            ...(historyTake ? { take: historyTake } : {}),
+          }),
+          this.prisma.feedbackEvent.findMany({
+            where: { ownerId: userId },
+            ...(paginate && query.feedbackCursor
+              ? {
+                  cursor: { id: query.feedbackCursor },
+                  skip: 1,
+                }
+              : {}),
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            ...(feedbackTake ? { take: feedbackTake } : {}),
+          }),
+        ]);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          throw new BadRequestException('Cursor de pagination invalide.');
+        }
+        throw error;
+      }
+    })();
+
+    const hasMoreEmployees = paginate && rawEmployees.length > query.employeesLimit;
+    const hasMoreAssignments = paginate && rawAssignments.length > query.assignmentsLimit;
+    const hasMoreHistory = paginate && rawHistoryEvents.length > query.historyLimit;
+    const hasMoreFeedback = paginate && rawFeedbackEvents.length > query.feedbackLimit;
+    const employees = hasMoreEmployees ? rawEmployees.slice(0, query.employeesLimit) : rawEmployees;
+    const assignments = hasMoreAssignments
+      ? rawAssignments.slice(0, query.assignmentsLimit)
+      : rawAssignments;
+    const historyEvents = hasMoreHistory
+      ? rawHistoryEvents.slice(0, query.historyLimit)
+      : rawHistoryEvents;
+    const feedbackEvents = hasMoreFeedback
+      ? rawFeedbackEvents.slice(0, query.feedbackLimit)
+      : rawFeedbackEvents;
 
     return {
       employees: employees.map((employee) => ({
@@ -132,6 +195,30 @@ export class AccessService {
         comment: event.comment ?? undefined,
         createdAt: event.createdAt.toISOString(),
       })),
+      pagination: {
+        employees: {
+          nextCursor: hasMoreEmployees ? (employees[employees.length - 1]?.id ?? null) : null,
+          hasMore: hasMoreEmployees,
+          limit: query.employeesLimit,
+        },
+        assignments: {
+          nextCursor: hasMoreAssignments ? (assignments[assignments.length - 1]?.id ?? null) : null,
+          hasMore: hasMoreAssignments,
+          limit: query.assignmentsLimit,
+        },
+        history: {
+          nextCursor: hasMoreHistory ? (historyEvents[historyEvents.length - 1]?.id ?? null) : null,
+          hasMore: hasMoreHistory,
+          limit: query.historyLimit,
+        },
+        feedbackRecords: {
+          nextCursor: hasMoreFeedback
+            ? (feedbackEvents[feedbackEvents.length - 1]?.id ?? null)
+            : null,
+          hasMore: hasMoreFeedback,
+          limit: query.feedbackLimit,
+        },
+      },
     };
   }
 

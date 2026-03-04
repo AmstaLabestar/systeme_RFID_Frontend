@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "test:frontend": "vitest run --config vitest.config.ts",
     "dev:backend": "npm --prefix backend run start:dev",
     "backend:prisma:generate": "npm --prefix backend run prisma:generate",
     "backend:prisma:migrate": "npm --prefix backend run prisma:migrate",
@@ -78,7 +79,8 @@
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
-    "vite": "6.4.1"
+    "vite": "6.4.1",
+    "vitest": "^4.0.18"
   },
   "peerDependencies": {
     "react": "18.3.1",

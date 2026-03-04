@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
 import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
 import { AccessService } from './access.service';
 import { AssignIdentifierDto } from './dto/assign-identifier.dto';
+import { GetServicesStateQueryDto } from './dto/get-services-state-query.dto';
 import { ReassignIdentifierDto } from './dto/reassign-identifier.dto';
 
 @Controller('services')
@@ -13,8 +14,11 @@ export class AccessController {
   constructor(private readonly accessService: AccessService) {}
 
   @Get('state')
-  getServicesState(@CurrentUser() user: AccessTokenPayload) {
-    return this.accessService.getServicesState(user.userId);
+  getServicesState(
+    @CurrentUser() user: AccessTokenPayload,
+    @Query() query: GetServicesStateQueryDto,
+  ) {
+    return this.accessService.getServicesState(user.userId, query);
   }
 
   @Post('assignments')

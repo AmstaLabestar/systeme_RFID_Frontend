@@ -14,6 +14,16 @@ import { ConsoleEmailGateway } from './providers/console-email.gateway';
 import { EMAIL_GATEWAY } from './providers/email-gateway.interface';
 import { SmtpEmailGateway } from './providers/smtp-email.gateway';
 import { AuthAttemptService } from './services/auth-attempt.service';
+import { CredentialService } from './services/credential.service';
+import {
+  COMPROMISED_PASSWORD_CHECKER,
+  HibpCompromisedPasswordCheckerService,
+  HIBP_RANGE_GATEWAY,
+  MockHibpRangeGateway,
+} from './services/hibp-password-checker.service';
+import { SessionService } from './services/session.service';
+import { TokenService } from './services/token.service';
+import { TwoFactorService } from './services/two-factor.service';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -39,6 +49,19 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     MagicLinkTokensRepository,
     GoogleTokenVerifierService,
     AuthAttemptService,
+    TokenService,
+    SessionService,
+    TwoFactorService,
+    CredentialService,
+    HibpCompromisedPasswordCheckerService,
+    {
+      provide: HIBP_RANGE_GATEWAY,
+      useClass: MockHibpRangeGateway,
+    },
+    {
+      provide: COMPROMISED_PASSWORD_CHECKER,
+      useExisting: HibpCompromisedPasswordCheckerService,
+    },
     {
       provide: EMAIL_GATEWAY,
       inject: [ConfigService],

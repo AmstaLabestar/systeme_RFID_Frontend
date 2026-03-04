@@ -132,7 +132,7 @@ export function AppRouter() {
               <Route path="overview" element={<OverviewPage />} />
               <Route path="marketplace" element={<MarketplacePage />} />
               <Route element={<PrivateRoute allowedRoles={['admin']} />}>
-                <Route path="admin-stock" element={<AdminStockPage />} />
+                <Route path="admin-stock/*" element={<AdminStockPage />} />
               </Route>
               <Route path="rfid-presence" element={<RfidPresencePage />} />
               <Route path="rfid-porte" element={<RfidPortePage />} />
