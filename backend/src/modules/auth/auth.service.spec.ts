@@ -14,7 +14,11 @@ import { GoogleTokenVerifierService } from './providers/google-token-verifier.se
 import { MagicLinkTokensRepository } from './repositories/magic-link-tokens.repository';
 import { RefreshTokensRepository } from './repositories/refresh-tokens.repository';
 import { AuthAttemptService } from './services/auth-attempt.service';
+import { CredentialService } from './services/credential.service';
 import type { CompromisedPasswordChecker } from './services/hibp-password-checker.service';
+import { SessionService } from './services/session.service';
+import { TokenService } from './services/token.service';
+import { TwoFactorService } from './services/two-factor.service';
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn(),
@@ -216,19 +220,40 @@ function createAuthServiceTestContext(registerMinResponseMs = 0): AuthServiceTes
     }),
   };
 
-  const service = new AuthService(
+  const tokenService = new TokenService(
     configService,
     jwtService,
+    refreshTokensRepository as unknown as RefreshTokensRepository,
+  );
+  const sessionService = new SessionService(
+    configService,
+    usersRepository as unknown as UsersRepository,
+    refreshTokensRepository as unknown as RefreshTokensRepository,
+    authAttemptService as unknown as AuthAttemptService,
+    tokenService,
+  );
+  const twoFactorService = new TwoFactorService(
+    configService,
+    usersRepository as unknown as UsersRepository,
+    authAttemptService as unknown as AuthAttemptService,
+    tokenService,
+    sessionService,
+  );
+  const credentialService = new CredentialService(
+    configService,
     usersRepository as unknown as UsersRepository,
     tenantsRepository as unknown as TenantsRepository,
     rolesRepository as unknown as RolesRepository,
-    refreshTokensRepository as unknown as RefreshTokensRepository,
     magicLinkTokensRepository as unknown as MagicLinkTokensRepository,
     googleTokenVerifierService as unknown as GoogleTokenVerifierService,
     authAttemptService as unknown as AuthAttemptService,
     compromisedPasswordChecker as unknown as CompromisedPasswordChecker,
     emailGateway as unknown as EmailGateway,
+    tokenService,
+    twoFactorService,
+    sessionService,
   );
+  const service = new AuthService(credentialService, twoFactorService, sessionService);
 
   return {
     service,

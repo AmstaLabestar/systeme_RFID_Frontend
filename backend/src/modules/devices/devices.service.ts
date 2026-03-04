@@ -4,6 +4,8 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { StockLedgerService } from '../inventory/stock-ledger.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { ConfigureDeviceDto } from './dto/configure-device.dto';
+import { GetMyDevicesQueryDto } from './dto/get-my-devices-query.dto';
+import type { GetMyDevicesResponseDto } from './dto/get-my-devices-response.dto';
 
 const MAC_ADDRESS_REGEX = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
 
@@ -23,22 +25,63 @@ export class DevicesService {
     private readonly outboxService: OutboxService,
   ) {}
 
-  getMyDevices(ownerId: string) {
-    return Promise.all([
-      this.prisma.device.findMany({
-        where: {
-          ownerId,
-          status: DeviceStatus.ASSIGNED,
-        },
-        orderBy: { assignedAt: 'desc' },
-        include: {
-          system: true,
-          identifiers: {
+  async getMyDevices(
+    ownerId: string,
+    query: GetMyDevicesQueryDto = new GetMyDevicesQueryDto(),
+  ): Promise<GetMyDevicesResponseDto> {
+    const paginate = query.paginate;
+    const devicesTake = paginate ? query.devicesLimit + 1 : undefined;
+    const standaloneTake = paginate ? query.standaloneLimit + 1 : undefined;
+
+    const [rawDevices, rawStandaloneIdentifiers] = await (async () => {
+      try {
+        return await Promise.all([
+          this.prisma.device.findMany({
             where: {
               ownerId,
+              status: DeviceStatus.ASSIGNED,
             },
-            orderBy: { createdAt: 'asc' },
+            ...(paginate && query.devicesCursor
+              ? {
+                  cursor: { id: query.devicesCursor },
+                  skip: 1,
+                }
+              : {}),
+            orderBy: [{ assignedAt: 'desc' }, { id: 'desc' }],
+            ...(devicesTake ? { take: devicesTake } : {}),
             include: {
+              system: true,
+              identifiers: {
+                where: {
+                  ownerId,
+                },
+                orderBy: { createdAt: 'asc' },
+                include: {
+                  serviceAssignment: {
+                    select: {
+                      employeeId: true,
+                      deviceId: true,
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          this.prisma.identifier.findMany({
+            where: {
+              ownerId,
+              deviceId: null,
+            },
+            ...(paginate && query.standaloneCursor
+              ? {
+                  cursor: { id: query.standaloneCursor },
+                  skip: 1,
+                }
+              : {}),
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            ...(standaloneTake ? { take: standaloneTake } : {}),
+            include: {
+              system: true,
               serviceAssignment: {
                 select: {
                   employeeId: true,
@@ -46,29 +89,41 @@ export class DevicesService {
                 },
               },
             },
-          },
-        },
-      }),
-      this.prisma.identifier.findMany({
-        where: {
-          ownerId,
-          deviceId: null,
-        },
-        orderBy: { createdAt: 'asc' },
-        include: {
-          system: true,
-          serviceAssignment: {
-            select: {
-              employeeId: true,
-              deviceId: true,
-            },
-          },
-        },
-      }),
-    ]).then(([devices, standaloneIdentifiers]) => ({
+          }),
+        ]);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          throw new BadRequestException('Cursor de pagination invalide.');
+        }
+        throw error;
+      }
+    })();
+
+    const hasMoreDevices = paginate && rawDevices.length > query.devicesLimit;
+    const hasMoreStandalone = paginate && rawStandaloneIdentifiers.length > query.standaloneLimit;
+    const devices = hasMoreDevices ? rawDevices.slice(0, query.devicesLimit) : rawDevices;
+    const standaloneIdentifiers = hasMoreStandalone
+      ? rawStandaloneIdentifiers.slice(0, query.standaloneLimit)
+      : rawStandaloneIdentifiers;
+
+    return {
       devices,
       standaloneIdentifiers,
-    }));
+      pagination: {
+        devices: {
+          nextCursor: hasMoreDevices ? (devices[devices.length - 1]?.id ?? null) : null,
+          hasMore: hasMoreDevices,
+          limit: query.devicesLimit,
+        },
+        standaloneIdentifiers: {
+          nextCursor: hasMoreStandalone
+            ? (standaloneIdentifiers[standaloneIdentifiers.length - 1]?.id ?? null)
+            : null,
+          hasMore: hasMoreStandalone,
+          limit: query.standaloneLimit,
+        },
+      },
+    };
   }
 
   async configureMyDevice(ownerId: string, deviceId: string, dto: ConfigureDeviceDto) {
