@@ -283,6 +283,11 @@ export const messages: Record<Locale, Record<string, string>> = {
     'access.activeAssignments.none': 'Aucune affectation active.',
     'access.activeAssignments.reassign': 'Reaffecter',
     'access.activeAssignments.remove': 'Retirer',
+    'access.activeAssignments.disable': 'Declarer perdu',
+    'access.activeAssignments.disableReasonPrompt':
+      'Motif de desactivation (ex: badge perdu par employe):',
+    'access.activeAssignments.disableReasonRequired':
+      'Le motif est obligatoire (minimum 3 caracteres).',
     'access.moduleHistory.title': 'Historique du module',
     'access.moduleHistory.none': 'Aucun historique.',
     'access.module.rfidPresence.description':
@@ -776,6 +781,11 @@ export const messages: Record<Locale, Record<string, string>> = {
     'access.activeAssignments.none': 'No active assignment.',
     'access.activeAssignments.reassign': 'Reassign',
     'access.activeAssignments.remove': 'Remove',
+    'access.activeAssignments.disable': 'Mark as lost',
+    'access.activeAssignments.disableReasonPrompt':
+      'Disable reason (example: badge lost by employee):',
+    'access.activeAssignments.disableReasonRequired':
+      'Reason is required (minimum 3 characters).',
     'access.moduleHistory.title': 'Module history',
     'access.moduleHistory.none': 'No history.',
     'access.module.rfidPresence.description':

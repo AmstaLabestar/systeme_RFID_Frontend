@@ -114,8 +114,9 @@ describe('Critical frontend flows characterization', () => {
         roleName: 'member',
       },
     });
-    expect('accessToken' in (result as Record<string, unknown>)).toBe(false);
-    expect('refreshToken' in (result as Record<string, unknown>)).toBe(false);
+    const resultRecord = result as unknown as Record<string, unknown>;
+    expect('accessToken' in resultRecord).toBe(false);
+    expect('refreshToken' in resultRecord).toBe(false);
   });
 
   it('purchase flow: sends marketplace order payload with idempotency header and refreshes state', async () => {

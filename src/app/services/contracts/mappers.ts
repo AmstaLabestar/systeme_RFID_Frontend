@@ -35,7 +35,7 @@ export interface NormalizedActivateDeviceResponse {
   marketplaceState: MarketplaceStatePayload;
 }
 
-export type NormalizedMutationAction = 'assign' | 'remove' | 'reassign';
+export type NormalizedMutationAction = 'assign' | 'remove' | 'reassign' | 'disable';
 
 export interface NormalizedServiceMutationMeta {
   module: ModuleKey;
@@ -175,6 +175,9 @@ function getAction(value: unknown): NormalizedMutationAction {
   if (normalized === 'reassign') {
     return 'reassign';
   }
+  if (normalized === 'disable') {
+    return 'disable';
+  }
   return 'assign';
 }
 
@@ -313,6 +316,8 @@ function toInventoryIdentifier(value: unknown): InventoryIdentifier | null {
   const explicitStatus: InventoryIdentifier['status'] | null =
     normalizedStatus === 'available'
       ? 'available'
+      : normalizedStatus === 'disabled'
+        ? 'disabled'
       : normalizedStatus === 'assigned' && employeeId
         ? 'assigned'
         : null;
@@ -401,7 +406,13 @@ function toHistoryEvent(value: unknown): HistoryEvent | null {
     employee: asString(source.employee, 'Inconnu'),
     identifier: asString(source.identifier, 'N/A'),
     device: asString(source.device, 'Boitier'),
+    eventType: asOptionalString(pickFirstDefined(source.eventType, source.event_type)) as
+      | HistoryEvent['eventType']
+      | undefined,
     action: asString(source.action, 'Evenement'),
+    actorId: asOptionalString(pickFirstDefined(source.actorId, source.actor_id)),
+    reason: asOptionalString(source.reason),
+    metadata: isRecord(source.metadata) ? source.metadata : undefined,
     occurredAt: asString(pickFirstDefined(source.occurredAt, source.occurred_at), new Date().toISOString()),
   };
 }
@@ -900,10 +911,21 @@ export function toAssignIdentifierPayload(payload: AssignIdentifierInput): Unkno
 }
 
 export function toReassignIdentifierPayload(payload: ReassignIdentifierInput): UnknownRecord {
-  return {
-    assignmentId: payload.assignmentId,
+  const body: UnknownRecord = {
     deviceId: payload.deviceId,
     firstName: payload.firstName,
     lastName: payload.lastName,
+  };
+
+  if (typeof payload.reason === 'string' && payload.reason.trim().length > 0) {
+    body.reason = payload.reason;
+  }
+
+  return body;
+}
+
+export function toDisableIdentifierPayload(payload: { reason: string }): UnknownRecord {
+  return {
+    reason: payload.reason,
   };
 }

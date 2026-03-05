@@ -165,7 +165,11 @@ export function Topbar({ onOpenSidebar }: TopbarProps) {
                             <span
                               key={identifier.id}
                               className={`badge badge-outline font-mono ${
-                                identifier.status === 'assigned' ? 'badge-success' : 'badge-info'
+                                identifier.status === 'assigned'
+                                  ? 'badge-success'
+                                  : identifier.status === 'disabled'
+                                    ? 'badge-warning'
+                                    : 'badge-info'
                               }`}
                             >
                               {identifier.code}

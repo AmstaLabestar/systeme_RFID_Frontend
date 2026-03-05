@@ -1,6 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { DeviceStatus, HardwareSystemCode, IdentifierType, Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  DeviceStatus,
+  HardwareSystemCode,
+  IdentifierLifecycleStatus,
+  IdentifierType,
+  Prisma,
+  ServiceHistoryEventType,
+} from '@prisma/client';
 import { AssignIdentifierDto } from './dto/assign-identifier.dto';
+import { DisableIdentifierDto } from './dto/disable-identifier.dto';
 import { GetServicesStateQueryDto } from './dto/get-services-state-query.dto';
 import type { GetServicesStateResponseDto } from './dto/get-services-state-response.dto';
 import { ReassignIdentifierDto } from './dto/reassign-identifier.dto';
@@ -34,6 +47,12 @@ const REMOVE_ACTION_LABELS: Record<Exclude<ModuleKey, 'feedback'>, string> = {
   biometrie: 'Retrait empreinte employee',
 };
 
+const DISABLE_ACTION_LABELS: Record<Exclude<ModuleKey, 'feedback'>, string> = {
+  'rfid-presence': 'Desactivation badge perdu',
+  'rfid-porte': 'Desactivation identifiant porte perdu',
+  biometrie: 'Desactivation empreinte employee',
+};
+
 function toSystemCode(moduleKey: string): HardwareSystemCode {
   const resolved = MODULE_TO_SYSTEM_CODE[moduleKey as ModuleKey];
   if (!resolved) {
@@ -54,6 +73,48 @@ function toIdentifierType(type: IdentifierType): 'badge-rfid' | 'empreinte' | 's
     return 'empreinte';
   }
   return 'serrure-rfid';
+}
+
+function toHistoryEventType(
+  type: ServiceHistoryEventType,
+): 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled' {
+  if (type === ServiceHistoryEventType.REMOVED) {
+    return 'removed';
+  }
+
+  if (type === ServiceHistoryEventType.REASSIGNED) {
+    return 'reassigned';
+  }
+
+  if (type === ServiceHistoryEventType.IDENTIFIER_DISABLED) {
+    return 'identifier_disabled';
+  }
+
+  return 'assigned';
+}
+
+function toOptionalMetadata(value: Prisma.JsonValue | null | undefined): Record<string, unknown> | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return undefined;
+}
+
+function normalizeReason(reason?: string | null): string | undefined {
+  const normalized = reason?.trim();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function toInventoryStatus(identifier: {
+  lifecycleStatus: IdentifierLifecycleStatus;
+  serviceAssignment: { employeeId: string; deviceId: string } | null;
+}): 'available' | 'assigned' | 'disabled' {
+  if (identifier.lifecycleStatus === IdentifierLifecycleStatus.DISABLED_LOST) {
+    return 'disabled';
+  }
+
+  return identifier.serviceAssignment ? 'assigned' : 'available';
 }
 
 function normalizeEmployeeName(firstName: string, lastName: string): {
@@ -183,7 +244,11 @@ export class AccessService {
         employee: event.employeeName,
         identifier: event.identifierCode,
         device: event.deviceName,
+        eventType: toHistoryEventType(event.eventType),
         action: event.action,
+        actorId: event.actorId ?? undefined,
+        reason: event.reason ?? undefined,
+        metadata: toOptionalMetadata(event.metadata),
         occurredAt: event.occurredAt.toISOString(),
       })),
       feedbackRecords: feedbackEvents.map((event) => ({
@@ -232,112 +297,126 @@ export class AccessService {
 
     let assignmentMeta: { identifierCode: string; deviceName: string } | undefined;
 
-    await this.prisma.$transaction(async (tx) => {
-      const device = await tx.device.findFirst({
-        where: {
-          id: dto.deviceId,
-          ownerId: userId,
-          status: DeviceStatus.ASSIGNED,
-          system: { code: systemCode },
-        },
-        include: {
-          system: true,
-        },
-      });
-
-      if (!device) {
-        throw new NotFoundException('Boitier introuvable pour ce module.');
-      }
-
-      if (!device.isConfigured) {
-        throw new BadRequestException('Configurez ce boitier avant l attribution.');
-      }
-
-      const identifier = await tx.identifier.findFirst({
-        where: {
-          id: dto.identifierId,
-          ownerId: userId,
-          system: { code: systemCode },
-        },
-        include: {
-          serviceAssignment: true,
-        },
-      });
-
-      if (!identifier) {
-        throw new NotFoundException('Identifiant introuvable dans l inventaire.');
-      }
-
-      if (identifier.serviceAssignment) {
-        throw new BadRequestException('Cet identifiant est deja attribue.');
-      }
-
-      if (identifier.deviceId && identifier.deviceId !== dto.deviceId) {
-        throw new BadRequestException('Cet identifiant est lie a un autre boitier.');
-      }
-
-      let employee = await tx.employee.findUnique({
-        where: {
-          ownerId_normalizedFullName: {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const device = await tx.device.findFirst({
+          where: {
+            id: dto.deviceId,
             ownerId: userId,
-            normalizedFullName: employeeMeta.normalizedFullName,
+            status: DeviceStatus.ASSIGNED,
+            system: { code: systemCode },
           },
-        },
-      });
-
-      if (!employee) {
-        employee = await tx.employee.create({
-          data: {
-            ownerId: userId,
-            firstName: employeeMeta.firstName,
-            lastName: employeeMeta.lastName,
-            normalizedFullName: employeeMeta.normalizedFullName,
+          include: {
+            system: true,
           },
         });
-      }
 
-      const duplicateEmployeeAssignment = await tx.serviceAssignment.findFirst({
-        where: {
-          ownerId: userId,
-          module: systemCode,
-          employeeId: employee.id,
-        },
-        select: { id: true },
-      });
+        if (!device) {
+          throw new NotFoundException('Boitier introuvable pour ce module.');
+        }
 
-      if (duplicateEmployeeAssignment) {
-        throw new BadRequestException('Cet employee possede deja un identifiant sur ce module.');
-      }
+        if (!device.isConfigured) {
+          throw new BadRequestException('Configurez ce boitier avant l attribution.');
+        }
 
-      await tx.serviceAssignment.create({
-        data: {
-          ownerId: userId,
-          module: systemCode,
-          deviceId: dto.deviceId,
-          identifierId: dto.identifierId,
-          employeeId: employee.id,
-        },
-      });
+        const identifier = await tx.identifier.findFirst({
+          where: {
+            id: dto.identifierId,
+            ownerId: userId,
+            system: { code: systemCode },
+          },
+          include: {
+            serviceAssignment: true,
+          },
+        });
 
-      await tx.serviceHistoryEvent.create({
-        data: {
-          ownerId: userId,
-          module: systemCode,
-          deviceId: device.id,
-          identifierId: identifier.id,
-          employeeId: employee.id,
-          employeeName: employeeMeta.fullName,
+        if (!identifier) {
+          throw new NotFoundException('Identifiant introuvable dans l inventaire.');
+        }
+
+        if (identifier.lifecycleStatus === IdentifierLifecycleStatus.DISABLED_LOST) {
+          throw new BadRequestException('Cet identifiant est desactive car declare perdu.');
+        }
+
+        if (identifier.serviceAssignment) {
+          throw new BadRequestException('Cet identifiant est deja attribue.');
+        }
+
+        if (identifier.deviceId && identifier.deviceId !== dto.deviceId) {
+          throw new BadRequestException('Cet identifiant est lie a un autre boitier.');
+        }
+
+        let employee = await tx.employee.findUnique({
+          where: {
+            ownerId_normalizedFullName: {
+              ownerId: userId,
+              normalizedFullName: employeeMeta.normalizedFullName,
+            },
+          },
+        });
+
+        if (!employee) {
+          employee = await tx.employee.create({
+            data: {
+              ownerId: userId,
+              firstName: employeeMeta.firstName,
+              lastName: employeeMeta.lastName,
+              normalizedFullName: employeeMeta.normalizedFullName,
+            },
+          });
+        }
+
+        const duplicateEmployeeAssignment = await tx.serviceAssignment.findFirst({
+          where: {
+            ownerId: userId,
+            module: systemCode,
+            employeeId: employee.id,
+          },
+          select: { id: true },
+        });
+
+        if (duplicateEmployeeAssignment) {
+          throw new BadRequestException('Cet employee possede deja un identifiant sur ce module.');
+        }
+
+        const createdAssignment = await tx.serviceAssignment.create({
+          data: {
+            ownerId: userId,
+            module: systemCode,
+            deviceId: dto.deviceId,
+            identifierId: dto.identifierId,
+            employeeId: employee.id,
+          },
+        });
+
+        await tx.serviceHistoryEvent.create({
+          data: {
+            ownerId: userId,
+            actorId: userId,
+            module: systemCode,
+            deviceId: device.id,
+            identifierId: identifier.id,
+            employeeId: employee.id,
+            employeeName: employeeMeta.fullName,
+            identifierCode: identifier.physicalIdentifier,
+            deviceName: device.configuredName ?? device.system.name,
+            eventType: ServiceHistoryEventType.ASSIGNED,
+            action: ASSIGN_ACTION_LABELS[dto.module as Exclude<ModuleKey, 'feedback'>],
+            metadata: {
+              assignmentId: createdAssignment.id,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
+        assignmentMeta = {
           identifierCode: identifier.physicalIdentifier,
           deviceName: device.configuredName ?? device.system.name,
-          action: ASSIGN_ACTION_LABELS[dto.module as Exclude<ModuleKey, 'feedback'>],
-        },
+        };
       });
-
-      assignmentMeta = {
-        identifierCode: identifier.physicalIdentifier,
-        deviceName: device.configuredName ?? device.system.name,
-      };
-    });
+    } catch (error) {
+      this.throwConflictIfUniqueViolation(error, 'Conflit d attribution en cours. Reessayez.');
+      throw error;
+    }
 
     const [savedServicesState, savedMarketplaceState] = await Promise.all([
       this.getServicesState(userId),
@@ -357,7 +436,7 @@ export class AccessService {
     };
   }
 
-  async removeAssignment(userId: string, assignmentId: string) {
+  async removeAssignment(userId: string, assignmentId: string, reason?: string) {
     const assignment = await this.prisma.serviceAssignment.findFirst({
       where: {
         id: assignmentId,
@@ -378,6 +457,9 @@ export class AccessService {
       throw new NotFoundException('Association introuvable.');
     }
 
+    const normalizedReason = normalizeReason(reason);
+    const employeeName = `${assignment.employee.firstName} ${assignment.employee.lastName}`.trim();
+
     await this.prisma.$transaction(async (tx) => {
       await tx.serviceAssignment.delete({
         where: { id: assignment.id },
@@ -386,16 +468,22 @@ export class AccessService {
       await tx.serviceHistoryEvent.create({
         data: {
           ownerId: userId,
+          actorId: userId,
           module: assignment.module,
           deviceId: assignment.deviceId,
           identifierId: assignment.identifierId,
           employeeId: assignment.employeeId,
-          employeeName: `${assignment.employee.firstName} ${assignment.employee.lastName}`.trim(),
+          employeeName,
           identifierCode: assignment.identifier.physicalIdentifier,
           deviceName: assignment.device.configuredName ?? assignment.device.system.name,
+          eventType: ServiceHistoryEventType.REMOVED,
           action: REMOVE_ACTION_LABELS[
             toModuleKey(assignment.module) as Exclude<ModuleKey, 'feedback'>
           ],
+          reason: normalizedReason ?? null,
+          metadata: {
+            assignmentId: assignment.id,
+          } as Prisma.InputJsonValue,
         },
       });
     });
@@ -411,7 +499,7 @@ export class AccessService {
       meta: {
         module: toModuleKey(assignment.module),
         action: 'remove',
-        employeeName: `${assignment.employee.firstName} ${assignment.employee.lastName}`.trim(),
+        employeeName,
         identifierCode: assignment.identifier.physicalIdentifier,
         deviceName: assignment.device.configuredName ?? assignment.device.system.name,
       },
@@ -426,6 +514,7 @@ export class AccessService {
       },
       include: {
         identifier: true,
+        employee: true,
         device: {
           include: {
             system: true,
@@ -438,90 +527,111 @@ export class AccessService {
       throw new NotFoundException('Association introuvable pour la reattribution.');
     }
 
+    if (assignment.identifier.lifecycleStatus === IdentifierLifecycleStatus.DISABLED_LOST) {
+      throw new BadRequestException('Cet identifiant est desactive car declare perdu.');
+    }
+
+    const normalizedReason = normalizeReason(dto.reason);
     const employeeMeta = normalizeEmployeeName(dto.firstName, dto.lastName);
     let reassignmentDeviceName: string | null = null;
 
-    await this.prisma.$transaction(async (tx) => {
-      const targetDevice = await tx.device.findFirst({
-        where: {
-          id: dto.deviceId,
-          ownerId: userId,
-          status: DeviceStatus.ASSIGNED,
-          system: {
-            code: assignment.module,
-          },
-        },
-        include: {
-          system: true,
-        },
-      });
-
-      if (!targetDevice || !targetDevice.isConfigured) {
-        throw new BadRequestException('Boitier cible invalide.');
-      }
-
-      if (assignment.identifier.deviceId && assignment.identifier.deviceId !== targetDevice.id) {
-        throw new BadRequestException('Identifiant indisponible pour ce boitier cible.');
-      }
-
-      let employee = await tx.employee.findUnique({
-        where: {
-          ownerId_normalizedFullName: {
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const targetDevice = await tx.device.findFirst({
+          where: {
+            id: dto.deviceId,
             ownerId: userId,
-            normalizedFullName: employeeMeta.normalizedFullName,
+            status: DeviceStatus.ASSIGNED,
+            system: {
+              code: assignment.module,
+            },
           },
-        },
-      });
-
-      if (!employee) {
-        employee = await tx.employee.create({
-          data: {
-            ownerId: userId,
-            firstName: employeeMeta.firstName,
-            lastName: employeeMeta.lastName,
-            normalizedFullName: employeeMeta.normalizedFullName,
+          include: {
+            system: true,
           },
         });
-      }
 
-      const duplicateEmployeeAssignment = await tx.serviceAssignment.findFirst({
-        where: {
-          ownerId: userId,
-          module: assignment.module,
-          employeeId: employee.id,
-          id: { not: assignment.id },
-        },
-        select: { id: true },
+        if (!targetDevice || !targetDevice.isConfigured) {
+          throw new BadRequestException('Boitier cible invalide.');
+        }
+
+        if (assignment.identifier.deviceId && assignment.identifier.deviceId !== targetDevice.id) {
+          throw new BadRequestException('Identifiant indisponible pour ce boitier cible.');
+        }
+
+        let employee = await tx.employee.findUnique({
+          where: {
+            ownerId_normalizedFullName: {
+              ownerId: userId,
+              normalizedFullName: employeeMeta.normalizedFullName,
+            },
+          },
+        });
+
+        if (!employee) {
+          employee = await tx.employee.create({
+            data: {
+              ownerId: userId,
+              firstName: employeeMeta.firstName,
+              lastName: employeeMeta.lastName,
+              normalizedFullName: employeeMeta.normalizedFullName,
+            },
+          });
+        }
+
+        const duplicateEmployeeAssignment = await tx.serviceAssignment.findFirst({
+          where: {
+            ownerId: userId,
+            module: assignment.module,
+            employeeId: employee.id,
+            id: { not: assignment.id },
+          },
+          select: { id: true },
+        });
+
+        if (duplicateEmployeeAssignment) {
+          throw new BadRequestException('Cet employee possede deja un identifiant sur ce module.');
+        }
+
+        await tx.serviceAssignment.update({
+          where: { id: assignment.id },
+          data: {
+            employeeId: employee.id,
+            deviceId: targetDevice.id,
+          },
+        });
+
+        await tx.serviceHistoryEvent.create({
+          data: {
+            ownerId: userId,
+            actorId: userId,
+            module: assignment.module,
+            deviceId: targetDevice.id,
+            identifierId: assignment.identifier.id,
+            employeeId: employee.id,
+            employeeName: employeeMeta.fullName,
+            identifierCode: assignment.identifier.physicalIdentifier,
+            deviceName: targetDevice.configuredName ?? targetDevice.system.name,
+            eventType: ServiceHistoryEventType.REASSIGNED,
+            action: 'Reattribution identifiant',
+            reason: normalizedReason ?? null,
+            metadata: {
+              assignmentId: assignment.id,
+              fromEmployeeId: assignment.employeeId,
+              fromEmployeeName: `${assignment.employee.firstName} ${assignment.employee.lastName}`.trim(),
+              fromDeviceId: assignment.deviceId,
+              toEmployeeId: employee.id,
+              toDeviceId: targetDevice.id,
+            } as Prisma.InputJsonValue,
+          },
+        });
+
+        reassignmentDeviceName = targetDevice.configuredName ?? targetDevice.system.name;
       });
-
-      if (duplicateEmployeeAssignment) {
-        throw new BadRequestException('Cet employee possede deja un identifiant sur ce module.');
-      }
-
-      await tx.serviceAssignment.update({
-        where: { id: assignment.id },
-        data: {
-          employeeId: employee.id,
-          deviceId: targetDevice.id,
-        },
-      });
-
-      await tx.serviceHistoryEvent.create({
-        data: {
-          ownerId: userId,
-          module: assignment.module,
-          deviceId: targetDevice.id,
-          identifierId: assignment.identifier.id,
-          employeeId: employee.id,
-          employeeName: employeeMeta.fullName,
-          identifierCode: assignment.identifier.physicalIdentifier,
-          deviceName: targetDevice.configuredName ?? targetDevice.system.name,
-          action: 'Reattribution identifiant',
-        },
-      });
-
-      reassignmentDeviceName = targetDevice.configuredName ?? targetDevice.system.name;
-    });
+    } catch (error) {
+      this.throwConflictIfUniqueViolation(error, 'Conflit de reattribution en cours. Reessayez.');
+      throw error;
+    }
 
     const [savedServicesState, savedMarketplaceState] = await Promise.all([
       this.getServicesState(userId),
@@ -539,6 +649,138 @@ export class AccessService {
         deviceName: reassignmentDeviceName ?? dto.deviceId,
       },
     };
+  }
+
+  async disableIdentifier(userId: string, identifierId: string, dto: DisableIdentifierDto) {
+    const normalizedReason = normalizeReason(dto.reason);
+    if (!normalizedReason) {
+      throw new BadRequestException('Un motif de desactivation est obligatoire.');
+    }
+
+    const identifier = await this.prisma.identifier.findFirst({
+      where: {
+        id: identifierId,
+        ownerId: userId,
+      },
+      include: {
+        system: true,
+        device: {
+          include: {
+            system: true,
+          },
+        },
+        serviceAssignment: {
+          include: {
+            employee: true,
+            device: {
+              include: {
+                system: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!identifier) {
+      throw new NotFoundException('Identifiant introuvable dans votre inventaire.');
+    }
+
+    if (identifier.lifecycleStatus === IdentifierLifecycleStatus.DISABLED_LOST) {
+      throw new BadRequestException('Cet identifiant est deja desactive.');
+    }
+
+    const currentAssignment = identifier.serviceAssignment;
+    const eventDeviceId = currentAssignment?.deviceId ?? identifier.deviceId;
+    if (!eventDeviceId) {
+      throw new BadRequestException(
+        'Cet identifiant n est pas rattache a un boitier. Impossible de tracer sa desactivation.',
+      );
+    }
+
+    const eventModuleCode = currentAssignment?.module ?? identifier.system.code;
+    const eventModule = toModuleKey(eventModuleCode);
+    const eventAction =
+      eventModule === 'feedback'
+        ? 'Desactivation identifiant'
+        : DISABLE_ACTION_LABELS[eventModule as Exclude<ModuleKey, 'feedback'>];
+    const eventDeviceName =
+      currentAssignment?.device.configuredName ??
+      currentAssignment?.device.system.name ??
+      identifier.device?.configuredName ??
+      identifier.device?.system.name ??
+      'Boitier';
+    const eventEmployeeName = currentAssignment
+      ? `${currentAssignment.employee.firstName} ${currentAssignment.employee.lastName}`.trim()
+      : 'Non assigne';
+
+    await this.prisma.$transaction(async (tx) => {
+      if (currentAssignment) {
+        await tx.serviceAssignment.delete({
+          where: { id: currentAssignment.id },
+        });
+      }
+
+      await tx.identifier.update({
+        where: { id: identifier.id },
+        data: {
+          lifecycleStatus: IdentifierLifecycleStatus.DISABLED_LOST,
+          disabledAt: new Date(),
+          disabledById: userId,
+          disabledReason: normalizedReason,
+        },
+      });
+
+      await tx.serviceHistoryEvent.create({
+        data: {
+          ownerId: userId,
+          actorId: userId,
+          module: eventModuleCode,
+          deviceId: eventDeviceId,
+          identifierId: identifier.id,
+          employeeId: currentAssignment?.employeeId ?? null,
+          employeeName: eventEmployeeName,
+          identifierCode: identifier.physicalIdentifier,
+          deviceName: eventDeviceName,
+          eventType: ServiceHistoryEventType.IDENTIFIER_DISABLED,
+          action: eventAction,
+          reason: normalizedReason,
+          metadata: {
+            assignmentRemoved: Boolean(currentAssignment),
+            previousAssignmentId: currentAssignment?.id ?? null,
+            previousEmployeeId: currentAssignment?.employeeId ?? null,
+            previousDeviceId: currentAssignment?.deviceId ?? null,
+          } as Prisma.InputJsonValue,
+        },
+      });
+    });
+
+    const [savedServicesState, savedMarketplaceState] = await Promise.all([
+      this.getServicesState(userId),
+      this.getMarketplaceState(userId),
+    ]);
+
+    return {
+      servicesState: savedServicesState,
+      marketplaceState: savedMarketplaceState,
+      meta: {
+        module: eventModule,
+        action: 'disable',
+        employeeName: eventEmployeeName,
+        identifierCode: identifier.physicalIdentifier,
+        deviceName: eventDeviceName,
+      },
+    };
+  }
+
+  private throwConflictIfUniqueViolation(error: unknown, fallbackMessage: string): void {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return;
+    }
+
+    if (error.code === 'P2002') {
+      throw new ConflictException(fallbackMessage);
+    }
   }
 
   private async getMarketplaceState(userId: string) {
@@ -592,7 +834,7 @@ export class AccessService {
           module: toModuleKey(device.system.code),
           type: toIdentifierType(identifier.type),
           code: identifier.physicalIdentifier,
-          status: identifier.serviceAssignment ? ('assigned' as const) : ('available' as const),
+          status: toInventoryStatus(identifier),
           deviceId: identifier.deviceId ?? identifier.serviceAssignment?.deviceId ?? undefined,
           employeeId: identifier.serviceAssignment?.employeeId,
           acquiredAt: identifier.createdAt.toISOString(),
@@ -603,7 +845,7 @@ export class AccessService {
         module: toModuleKey(identifier.system.code),
         type: toIdentifierType(identifier.type),
         code: identifier.physicalIdentifier,
-        status: identifier.serviceAssignment ? ('assigned' as const) : ('available' as const),
+        status: toInventoryStatus(identifier),
         deviceId: identifier.deviceId ?? identifier.serviceAssignment?.deviceId ?? undefined,
         employeeId: identifier.serviceAssignment?.employeeId,
         acquiredAt: identifier.createdAt.toISOString(),

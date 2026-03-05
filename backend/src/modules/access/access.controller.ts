@@ -5,8 +5,10 @@ import { TwoFactorAuthGuard } from '../../common/guards/two-factor-auth.guard';
 import type { AccessTokenPayload } from '../../common/interfaces/jwt-payload.interface';
 import { AccessService } from './access.service';
 import { AssignIdentifierDto } from './dto/assign-identifier.dto';
+import { DisableIdentifierDto } from './dto/disable-identifier.dto';
 import { GetServicesStateQueryDto } from './dto/get-services-state-query.dto';
 import { ReassignIdentifierDto } from './dto/reassign-identifier.dto';
+import { RemoveAssignmentQueryDto } from './dto/remove-assignment-query.dto';
 
 @Controller('services')
 @UseGuards(JwtAuthGuard, TwoFactorAuthGuard)
@@ -27,8 +29,12 @@ export class AccessController {
   }
 
   @Delete('assignments/:assignmentId')
-  removeAssignment(@CurrentUser() user: AccessTokenPayload, @Param('assignmentId') assignmentId: string) {
-    return this.accessService.removeAssignment(user.userId, assignmentId);
+  removeAssignment(
+    @CurrentUser() user: AccessTokenPayload,
+    @Param('assignmentId') assignmentId: string,
+    @Query() query: RemoveAssignmentQueryDto,
+  ) {
+    return this.accessService.removeAssignment(user.userId, assignmentId, query.reason);
   }
 
   @Post('assignments/:assignmentId/reassign')
@@ -38,5 +44,14 @@ export class AccessController {
     @Body() dto: ReassignIdentifierDto,
   ) {
     return this.accessService.reassignIdentifier(user.userId, assignmentId, dto);
+  }
+
+  @Post('identifiers/:identifierId/disable')
+  disableIdentifier(
+    @CurrentUser() user: AccessTokenPayload,
+    @Param('identifierId') identifierId: string,
+    @Body() dto: DisableIdentifierDto,
+  ) {
+    return this.accessService.disableIdentifier(user.userId, identifierId, dto);
   }
 }
