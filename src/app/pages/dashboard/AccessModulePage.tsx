@@ -44,6 +44,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     assignIdentifier,
     removeAssignment,
     reassignIdentifier,
+    disableIdentifier,
     getAssignmentsByModule,
     getEmployeeById,
     getHistoryByDevice,
@@ -271,6 +272,29 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     }
   };
 
+  const handleDisableIdentifier = async (assignmentId: string, identifierId: string) => {
+    const rawReason = window.prompt(t('access.activeAssignments.disableReasonPrompt'));
+    if (rawReason === null) {
+      return;
+    }
+
+    const reason = rawReason.trim();
+    if (reason.length < 3) {
+      toast.error(t('access.activeAssignments.disableReasonRequired'));
+      return;
+    }
+
+    try {
+      await disableIdentifier({ identifierId, reason });
+      if (editingAssignmentId === assignmentId) {
+        setEditingAssignmentId(null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t('access.errors.operationImpossible');
+      toast.error(message);
+    }
+  };
+
   const handleDownloadDeviceHistoryPdf = (
     deviceId: string,
     options?: { forceCloseAfterExport?: boolean },
@@ -487,6 +511,8 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                       ) : (
                         identifierOptions.map((identifier) => {
                           const isAssigned = identifier.status === 'assigned';
+                          const isDisabled = identifier.status === 'disabled';
+                          const isSelectable = identifier.status === 'available';
                           const isSelected = selectedAssignmentIdentifierId === identifier.id;
 
                           return (
@@ -496,19 +522,29 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                               className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left transition ${
                                 isAssigned
                                   ? 'border-[var(--success-main)]/40 bg-[var(--success-main)]/10 text-[var(--success-main)]'
+                                  : isDisabled
+                                    ? 'border-[var(--warning-main)]/40 bg-[var(--warning-main)]/10 text-[var(--warning-main)]'
                                   : isSelected
                                     ? 'border-[var(--accent-primary)] bg-[var(--card-bg)] text-[var(--text-primary)]'
                                     : 'border-[var(--border-soft)] bg-[var(--card-bg)] text-[var(--text-primary)]'
                               }`}
-                              disabled={isAssigned}
+                              disabled={!isSelectable}
                               onClick={() =>
                                 setValue('identifierId', identifier.id, { shouldDirty: true, shouldValidate: true })
                               }
                             >
                               <span className="font-mono text-xs">{identifier.code}</span>
                               <div className="flex items-center gap-1">
-                                <span className={`badge badge-xs ${isAssigned ? 'badge-success' : 'badge-outline'}`}>
-                                  {isAssigned ? 'Associe' : 'Disponible'}
+                                <span
+                                  className={`badge badge-xs ${
+                                    isAssigned
+                                      ? 'badge-success'
+                                      : isDisabled
+                                        ? 'badge-warning'
+                                        : 'badge-outline'
+                                  }`}
+                                >
+                                  {isAssigned ? 'Associe' : isDisabled ? 'Desactive' : 'Disponible'}
                                 </span>
                                 <span
                                   className={`badge badge-xs ${
@@ -626,6 +662,15 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
                               >
                                 <Trash2 className="h-3 w-3" />
                                 {t('access.activeAssignments.remove')}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-xs btn-outline btn-warning"
+                                onClick={() => {
+                                  void handleDisableIdentifier(assignment.id, assignment.identifierId);
+                                }}
+                              >
+                                {t('access.activeAssignments.disable')}
                               </button>
                             </div>
                           </td>

@@ -38,6 +38,18 @@ enum IdentifierStatus {
   ASSIGNED
 }
 
+enum IdentifierLifecycleStatus {
+  ACTIVE
+  DISABLED_LOST
+}
+
+enum ServiceHistoryEventType {
+  ASSIGNED
+  REMOVED
+  REASSIGNED
+  IDENTIFIER_DISABLED
+}
+
 enum FeedbackSentiment {
   NEGATIVE
   NEUTRAL
@@ -154,9 +166,11 @@ model User {
   createdDevices           Device[]          @relation("admin_created_devices")
   ownedIdentifiers         Identifier[]      @relation("user_identifiers")
   createdIdentifiers       Identifier[]      @relation("admin_created_identifiers")
+  disabledIdentifiers      Identifier[]      @relation("user_disabled_identifiers")
   orders                   Order[]           @relation("user_orders")
   allocations              Allocation[]      @relation("user_allocations")
   adminActionLogs          AdminActionLog[]  @relation("admin_action_logs")
+  serviceHistoryActorEvents ServiceHistoryEvent[] @relation("user_service_history_actor_events")
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
 
@@ -287,6 +301,11 @@ model Identifier {
   type                IdentifierType
   physicalIdentifier  String           @unique
   status              IdentifierStatus @default(IN_STOCK)
+  lifecycleStatus     IdentifierLifecycleStatus @default(ACTIVE)
+  disabledAt          DateTime?
+  disabledReason      String?
+  disabledById        String?
+  disabledBy          User?            @relation("user_disabled_identifiers", fields: [disabledById], references: [id], onDelete: SetNull)
   allocations         Allocation[]
   serviceAssignment   ServiceAssignment? @relation("identifier_service_assignment")
   serviceHistoryEvents ServiceHistoryEvent[] @relation("identifier_service_history_events")
@@ -296,9 +315,11 @@ model Identifier {
 
   @@index([systemId])
   @@index([status])
+  @@index([lifecycleStatus])
   @@index([ownerId])
   @@index([ownerTenantId])
   @@index([deviceId])
+  @@index([disabledById])
   @@index([warehouseCode])
   @@index([reservationExpiresAt])
   @@index([status, reservationExpiresAt])
@@ -350,6 +371,8 @@ model ServiceHistoryEvent {
   id             String           @id @default(uuid())
   ownerId        String
   owner          User             @relation("user_service_history_events", fields: [ownerId], references: [id], onDelete: Cascade)
+  actorId        String?
+  actor          User?            @relation("user_service_history_actor_events", fields: [actorId], references: [id], onDelete: SetNull)
   module         HardwareSystemCode
   deviceId       String
   device         Device           @relation("device_service_history_events", fields: [deviceId], references: [id], onDelete: Restrict)
@@ -360,12 +383,17 @@ model ServiceHistoryEvent {
   employeeName   String
   identifierCode String
   deviceName     String
+  eventType      ServiceHistoryEventType @default(ASSIGNED)
   action         String
+  reason         String?
+  metadata       Json?
   occurredAt     DateTime         @default(now())
   createdAt      DateTime         @default(now())
 
   @@index([ownerId, module, occurredAt])
+  @@index([ownerId, eventType, occurredAt])
   @@index([deviceId, occurredAt])
+  @@index([actorId, occurredAt])
   @@index([ownerId, occurredAt])
   @@map("service_history_events")
 }

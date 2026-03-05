@@ -42,6 +42,7 @@ export const SERVICES_ROUTES = {
   assignments: '/services/assignments',
   assignmentById: (assignmentId: string) => `/services/assignments/${assignmentId}`,
   reassignAssignment: (assignmentId: string) => `/services/assignments/${assignmentId}/reassign`,
+  disableIdentifier: (identifierId: string) => `/services/identifiers/${identifierId}/disable`,
 } as const;
 
 export const PUBLIC_ROUTES = {

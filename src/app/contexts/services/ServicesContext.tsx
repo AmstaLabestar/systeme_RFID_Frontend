@@ -32,6 +32,7 @@ interface ServicesContextValue {
   assignIdentifier: (input: AssignIdentifierInput) => Promise<void>;
   removeAssignment: (assignmentId: string) => Promise<void>;
   reassignIdentifier: (input: ReassignIdentifierInput) => Promise<void>;
+  disableIdentifier: (input: { identifierId: string; reason: string }) => Promise<void>;
   getAssignmentsByModule: (module: ModuleKey) => ServiceAssignment[];
   getHistoryByModule: (module?: ModuleKey) => HistoryEvent[];
   getHistoryByDevice: (deviceId: string, module?: ModuleKey) => HistoryEvent[];
@@ -77,7 +78,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
   });
 
   const removeMutation = useMutation({
-    mutationFn: accessService.removeAssignment,
+    mutationFn: (assignmentId: string) => accessService.removeAssignment(assignmentId),
     onSuccess: (response) => {
       queryClient.setQueryData(queryKeys.services.state(userScope), response.servicesState);
       applyMarketplaceState(response.marketplaceState);
@@ -92,6 +93,15 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       applyMarketplaceState(response.marketplaceState);
     },
     mutationKey: ['services', 'reassign', userScope],
+  });
+
+  const disableMutation = useMutation({
+    mutationFn: accessService.disableIdentifier,
+    onSuccess: (response) => {
+      queryClient.setQueryData(queryKeys.services.state(userScope), response.servicesState);
+      applyMarketplaceState(response.marketplaceState);
+    },
+    mutationKey: ['services', 'disable', userScope],
   });
 
   const assignIdentifier = useCallback(
@@ -139,6 +149,21 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
     [reassignMutation, addNotification],
   );
 
+  const disableIdentifier = useCallback(
+    async (input: { identifierId: string; reason: string }) => {
+      const response = await disableMutation.mutateAsync(input);
+
+      addNotification({
+        title: 'Identifiant desactive',
+        message: `${response.meta.identifierCode} a ete desactive.`,
+        module: response.meta.module,
+        kind: 'warning',
+        withToast: true,
+      });
+    },
+    [disableMutation, addNotification],
+  );
+
   const getAssignmentsByModule = useCallback(
     (module: ModuleKey): ServiceAssignment[] =>
       assignments.filter((assignment) => assignment.module === module),
@@ -176,6 +201,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       assignIdentifier,
       removeAssignment,
       reassignIdentifier,
+      disableIdentifier,
       getAssignmentsByModule,
       getHistoryByModule,
       getHistoryByDevice,
@@ -189,6 +215,7 @@ export function ServicesProvider({ children }: { children: ReactNode }) {
       assignIdentifier,
       removeAssignment,
       reassignIdentifier,
+      disableIdentifier,
       getAssignmentsByModule,
       getHistoryByModule,
       getHistoryByDevice,

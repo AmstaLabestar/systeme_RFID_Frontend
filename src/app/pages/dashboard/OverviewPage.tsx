@@ -15,7 +15,7 @@ export function OverviewPage() {
   const pendingDevices = devices.filter((device) => !device.configured);
 
   const assignedIdentifiers = inventory.filter((identifier) => identifier.status === 'assigned').length;
-  const availableIdentifiers = inventory.length - assignedIdentifiers;
+  const availableIdentifiers = inventory.filter((identifier) => identifier.status === 'available').length;
   const activeModules = new Set(configuredDevices.map((device) => device.module)).size;
 
   const remainingRate = inventory.length > 0 ? (availableIdentifiers / inventory.length) * 100 : 100;

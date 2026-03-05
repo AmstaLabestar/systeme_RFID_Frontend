@@ -57,7 +57,7 @@ export interface InventoryIdentifier {
   module: ModuleKey;
   type: IdentifierType;
   code: string;
-  status: 'available' | 'assigned';
+  status: 'available' | 'assigned' | 'disabled';
   deviceId?: string;
   employeeId?: string;
   acquiredAt: string;
@@ -87,7 +87,11 @@ export interface HistoryEvent {
   employee: string;
   identifier: string;
   device: string;
+  eventType?: 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled';
   action: string;
+  actorId?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
   occurredAt: string;
 }
 
@@ -156,4 +160,5 @@ export interface ReassignIdentifierInput {
   deviceId: string;
   firstName: string;
   lastName: string;
+  reason?: string;
 }
