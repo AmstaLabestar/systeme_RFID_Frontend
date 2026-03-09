@@ -115,5 +115,7 @@ export const envValidationSchema = Joi.object({
   DEVICE_MQTT_PASSWORD: Joi.string().allow('').optional(),
   DEVICE_MQTT_RECONNECT_PERIOD_MS: Joi.number().integer().min(1000).max(60000).default(5000),
   DEVICE_MQTT_CONNECT_TIMEOUT_MS: Joi.number().integer().min(1000).max(120000).default(30000),
+  DEVICE_EVENT_DISPATCH_INTERVAL_MS: Joi.number().integer().min(500).max(60000).default(3000),
+  DEVICE_EVENT_DISPATCH_BATCH_SIZE: Joi.number().integer().min(1).max(500).default(50),
 
 });

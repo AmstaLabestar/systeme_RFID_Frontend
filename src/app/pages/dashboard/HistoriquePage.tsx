@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, Copy } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { MODULE_LABEL_KEYS } from '@/app/data';
 import { useI18n, useServices } from '@/app/contexts';
 import { formatDateTime } from '@/app/services';
@@ -39,12 +41,97 @@ function getScanAttributionStatus(entry: HistoryEvent): 'attributed' | 'unattrib
   return 'unknown';
 }
 
+function getOptionalMetadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | null {
+  const value = metadata?.[key];
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
+}
+
+function getDebugCopyPayload(entry: HistoryEvent): string | null {
+  if (entry.eventType !== 'identifier_scanned') {
+    return null;
+  }
+
+  const lines = [`historyEventId=${entry.id}`];
+  const ingestionEventId = getOptionalMetadataString(entry.metadata, 'ingestionEventId');
+  const ingestionInboxId = getOptionalMetadataString(entry.metadata, 'ingestionInboxId');
+  const streamEventId = getOptionalMetadataString(entry.metadata, 'streamEventId');
+  const sourceSequence = getOptionalMetadataString(entry.metadata, 'sourceSequence');
+
+  if (ingestionEventId) {
+    lines.push(`ingestionEventId=${ingestionEventId}`);
+  }
+  if (ingestionInboxId) {
+    lines.push(`ingestionInboxId=${ingestionInboxId}`);
+  }
+  if (streamEventId) {
+    lines.push(`streamEventId=${streamEventId}`);
+  }
+  if (sourceSequence) {
+    lines.push(`sourceSequence=${sourceSequence}`);
+  }
+
+  return lines.join('\n');
+}
+
+function getDebugDetails(entry: HistoryEvent): Array<{ labelKey: string; value: string }> {
+  const details: Array<{ labelKey: string; value: string }> = [
+    {
+      labelKey: 'history.debugPanel.historyEventId',
+      value: entry.id,
+    },
+  ];
+
+  const ingestionEventId = getOptionalMetadataString(entry.metadata, 'ingestionEventId');
+  const ingestionInboxId = getOptionalMetadataString(entry.metadata, 'ingestionInboxId');
+  const streamEventId = getOptionalMetadataString(entry.metadata, 'streamEventId');
+  const sourceSequence = getOptionalMetadataString(entry.metadata, 'sourceSequence');
+
+  if (ingestionEventId) {
+    details.push({
+      labelKey: 'history.debugPanel.ingestionEventId',
+      value: ingestionEventId,
+    });
+  }
+  if (ingestionInboxId) {
+    details.push({
+      labelKey: 'history.debugPanel.ingestionInboxId',
+      value: ingestionInboxId,
+    });
+  }
+  if (streamEventId) {
+    details.push({
+      labelKey: 'history.debugPanel.streamEventId',
+      value: streamEventId,
+    });
+  }
+  if (sourceSequence) {
+    details.push({
+      labelKey: 'history.debugPanel.sourceSequence',
+      value: sourceSequence,
+    });
+  }
+
+  return details;
+}
+
 export function HistoriquePage() {
   const { history } = useServices();
   const { locale, t } = useI18n();
   const [moduleFilter, setModuleFilter] = useState<'all' | ModuleKey>('all');
   const [scanFilter, setScanFilter] = useState<ScanFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [expandedDebugEventId, setExpandedDebugEventId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   const filteredHistory = useMemo(() => {
@@ -153,6 +240,26 @@ export function HistoriquePage() {
       return byRecent(left, right);
     });
   }, [filteredHistory, sortMode]);
+
+  const handleCopyDebugIds = async (entry: HistoryEvent) => {
+    const payload = getDebugCopyPayload(entry);
+    if (!payload) {
+      toast.error(t('history.debugIds.unavailable'));
+      return;
+    }
+
+    if (!navigator.clipboard?.writeText) {
+      toast.error(t('history.debugIds.clipboardUnavailable'));
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(payload);
+      toast.success(t('history.debugIds.copied'));
+    } catch {
+      toast.error(t('history.debugIds.copyError'));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -270,29 +377,86 @@ export function HistoriquePage() {
                       : scanStatus === 'unattributed'
                         ? 'badge-warning'
                         : 'badge-outline';
+                  const isScanEvent = entry.eventType === 'identifier_scanned';
+                  const isDebugExpanded = expandedDebugEventId === entry.id;
+                  const debugDetails = isScanEvent ? getDebugDetails(entry) : [];
 
                   return (
-                    <tr key={entry.id}>
-                      <td>{formatDateTime(entry.occurredAt, locale === 'fr' ? 'fr-FR' : 'en-US')}</td>
-                      <td>{t(MODULE_LABEL_KEYS[entry.module])}</td>
-                      <td>{entry.employee}</td>
-                      <td className="font-mono text-[var(--accent-primary)]">{entry.identifier}</td>
-                      <td>{entry.device}</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          {entry.eventType === 'identifier_scanned' ? (
-                            <span className={`badge badge-xs ${scanStatusClass}`}>
-                              {scanStatus === 'attributed'
-                                ? t('history.scanStatus.attributed')
-                                : scanStatus === 'unattributed'
-                                  ? t('history.scanStatus.unattributed')
-                                  : t('history.scanStatus.unknown')}
-                            </span>
-                          ) : null}
-                          <span>{entry.action}</span>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={entry.id}>
+                      <tr>
+                        <td>{formatDateTime(entry.occurredAt, locale === 'fr' ? 'fr-FR' : 'en-US')}</td>
+                        <td>{t(MODULE_LABEL_KEYS[entry.module])}</td>
+                        <td>{entry.employee}</td>
+                        <td className="font-mono text-[var(--accent-primary)]">{entry.identifier}</td>
+                        <td>{entry.device}</td>
+                        <td>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {isScanEvent ? (
+                              <span className={`badge badge-xs ${scanStatusClass}`}>
+                                {scanStatus === 'attributed'
+                                  ? t('history.scanStatus.attributed')
+                                  : scanStatus === 'unattributed'
+                                    ? t('history.scanStatus.unattributed')
+                                    : t('history.scanStatus.unknown')}
+                              </span>
+                            ) : null}
+                            <span>{entry.action}</span>
+                            {isScanEvent ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                title={t('history.debugPanel.toggle')}
+                                aria-label={t('history.debugPanel.toggle')}
+                                onClick={() => {
+                                  setExpandedDebugEventId((current) => (current === entry.id ? null : entry.id));
+                                }}
+                              >
+                                {isDebugExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                {t('history.debugPanel.label')}
+                              </button>
+                            ) : null}
+                            {isScanEvent ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                title={t('history.debugIds.copyButton')}
+                                aria-label={t('history.debugIds.copyButton')}
+                                onClick={() => {
+                                  void handleCopyDebugIds(entry);
+                                }}
+                              >
+                                <Copy className="h-3 w-3" />
+                                {t('history.debugIds.label')}
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                      {isScanEvent && isDebugExpanded ? (
+                        <tr>
+                          <td colSpan={6} className="bg-[var(--surface-muted)]/50">
+                            <div className="rounded-lg border border-[var(--border-soft)] bg-[var(--surface-muted)] p-4">
+                              <p className="text-xs uppercase tracking-[0.15em] text-[var(--text-secondary)]">
+                                {t('history.debugPanel.title')}
+                              </p>
+                              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                {debugDetails.map((detail) => (
+                                  <div
+                                    key={`${entry.id}:${detail.labelKey}`}
+                                    className="rounded-lg border border-[var(--border-soft)] bg-[var(--card-bg)] p-3"
+                                  >
+                                    <p className="text-xs text-[var(--text-secondary)]">{t(detail.labelKey)}</p>
+                                    <p className="mt-1 break-all font-mono text-xs text-[var(--text-primary)]">
+                                      {detail.value}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
