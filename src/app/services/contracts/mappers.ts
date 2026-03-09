@@ -9,11 +9,19 @@ import type {
   IdentifierType,
   InventoryIdentifier,
   ModuleKey,
+  PresenceSnapshotDevice,
+  PresenceSnapshotEvent,
+  PresenceRealtimeScanEvent,
+  PresenceSnapshotTotals,
   Product,
   ReassignIdentifierInput,
   ServiceAssignment,
 } from '@/app/types';
-import type { MarketplaceStatePayload, ServicesStatePayload } from '@/app/services/types';
+import type {
+  MarketplaceStatePayload,
+  PresenceSnapshotPayload,
+  ServicesStatePayload,
+} from '@/app/services/types';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -446,6 +454,74 @@ function toFeedbackRecord(value: unknown): FeedbackRecord | null {
   };
 }
 
+function toPresenceSnapshotTotals(value: unknown): PresenceSnapshotTotals {
+  const source = asRecord(value);
+
+  return {
+    totalScans: Math.max(asNumber(pickFirstDefined(source.totalScans, source.total_scans), 0), 0),
+    attributedScans: Math.max(
+      asNumber(pickFirstDefined(source.attributedScans, source.attributed_scans), 0),
+      0,
+    ),
+    unattributedScans: Math.max(
+      asNumber(pickFirstDefined(source.unattributedScans, source.unattributed_scans), 0),
+      0,
+    ),
+    activeEmployees: Math.max(
+      asNumber(pickFirstDefined(source.activeEmployees, source.active_employees), 0),
+      0,
+    ),
+  };
+}
+
+function toPresenceSnapshotDevice(value: unknown): PresenceSnapshotDevice | null {
+  const source = asRecord(value);
+  const deviceId = asOptionalString(pickFirstDefined(source.deviceId, source.device_id));
+
+  if (!deviceId) {
+    return null;
+  }
+
+  return {
+    deviceId,
+    deviceName: asString(pickFirstDefined(source.deviceName, source.device_name), 'Boitier'),
+    totalScans: Math.max(asNumber(pickFirstDefined(source.totalScans, source.total_scans), 0), 0),
+    attributedScans: Math.max(
+      asNumber(pickFirstDefined(source.attributedScans, source.attributed_scans), 0),
+      0,
+    ),
+    unattributedScans: Math.max(
+      asNumber(pickFirstDefined(source.unattributedScans, source.unattributed_scans), 0),
+      0,
+    ),
+    lastScanAt:
+      asOptionalString(pickFirstDefined(source.lastScanAt, source.last_scan_at)) ?? null,
+  };
+}
+
+function toPresenceSnapshotEvent(value: unknown): PresenceSnapshotEvent | null {
+  const source = asRecord(value);
+  const id = asOptionalString(source.id);
+  const deviceId = asOptionalString(pickFirstDefined(source.deviceId, source.device_id));
+
+  if (!id || !deviceId) {
+    return null;
+  }
+
+  return {
+    id,
+    deviceId,
+    deviceName: asString(pickFirstDefined(source.deviceName, source.device_name), 'Boitier'),
+    employee: asString(source.employee, 'Inconnu'),
+    identifier: asString(source.identifier, 'N/A'),
+    occurredAt: asString(
+      pickFirstDefined(source.occurredAt, source.occurred_at),
+      new Date().toISOString(),
+    ),
+    attributed: asBoolean(source.attributed, false),
+  };
+}
+
 function mapCollection<T>(values: unknown, mapper: (value: unknown) => T | null): T[] {
   return asArray(values).map(mapper).filter((entry): entry is T => entry !== null);
 }
@@ -713,6 +789,69 @@ export function toServicesState(value: unknown): ServicesStatePayload {
     feedbackRecords: mapCollection(
       pickFirstDefined(source.feedbackRecords, source.feedback_records),
       toFeedbackRecord,
+    ),
+  };
+}
+
+export function toPresenceSnapshot(value: unknown): PresenceSnapshotPayload {
+  const source = getPayloadSource(value);
+  const totalsSource = asRecord(pickFirstDefined(source.totals, source.summary));
+
+  return {
+    lookbackHours: Math.max(
+      asNumber(pickFirstDefined(source.lookbackHours, source.lookback_hours), 24),
+      1,
+    ),
+    periodStartAt: asString(
+      pickFirstDefined(source.periodStartAt, source.period_start_at),
+      new Date().toISOString(),
+    ),
+    periodEndAt: asString(
+      pickFirstDefined(source.periodEndAt, source.period_end_at),
+      new Date().toISOString(),
+    ),
+    totals: toPresenceSnapshotTotals(totalsSource),
+    byDevice: mapCollection(
+      pickFirstDefined(source.byDevice, source.by_device),
+      toPresenceSnapshotDevice,
+    ),
+    lastScans: mapCollection(
+      pickFirstDefined(source.lastScans, source.last_scans),
+      toPresenceSnapshotEvent,
+    ),
+  };
+}
+
+export function toPresenceRealtimeScanEvent(value: unknown): PresenceRealtimeScanEvent {
+  const source = asRecord(value);
+  const id = asOptionalString(source.id);
+  const historyEventId = asOptionalString(pickFirstDefined(source.historyEventId, source.history_event_id));
+  const deviceId = asOptionalString(pickFirstDefined(source.deviceId, source.device_id));
+
+  if (!id || !historyEventId || !deviceId) {
+    throw new Error('Presence realtime event invalide.');
+  }
+
+  return {
+    id,
+    historyEventId,
+    deviceId,
+    deviceName: asString(pickFirstDefined(source.deviceName, source.device_name), 'Boitier'),
+    employeeName: asString(pickFirstDefined(source.employeeName, source.employee_name), 'Inconnu'),
+    identifierCode: asString(
+      pickFirstDefined(source.identifierCode, source.identifier_code),
+      'N/A',
+    ),
+    attributed: asBoolean(source.attributed, false),
+    occurredAt: asString(
+      pickFirstDefined(source.occurredAt, source.occurred_at),
+      new Date().toISOString(),
+    ),
+    ingestionEventId: asOptionalString(
+      pickFirstDefined(source.ingestionEventId, source.ingestion_event_id),
+    ),
+    ingestionInboxId: asOptionalString(
+      pickFirstDefined(source.ingestionInboxId, source.ingestion_inbox_id),
     ),
   };
 }

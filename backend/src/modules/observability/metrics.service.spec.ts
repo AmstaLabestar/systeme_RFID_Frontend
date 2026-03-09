@@ -46,4 +46,25 @@ describe('MetricsService', () => {
     expect(metrics).toContain('rfid_outbox_dispatch_failures_total 1');
     expect(metrics).toContain('rfid_outbox_webhook_failures_total 2');
   });
+
+  it('records device ingestion and dispatch counters', () => {
+    const service = new MetricsService();
+
+    service.recordDeviceIngestionAccepted();
+    service.recordDeviceIngestionDuplicate();
+    service.recordDeviceIngestionRejected();
+    service.recordDeviceIngestionAuthFailure();
+    service.recordDeviceDispatchProcessed();
+    service.recordDeviceDispatchProcessed(2);
+    service.recordDeviceDispatchFailure();
+
+    const metrics = service.renderPrometheus();
+
+    expect(metrics).toContain('rfid_device_ingestion_events_accepted_total 1');
+    expect(metrics).toContain('rfid_device_ingestion_events_duplicate_total 1');
+    expect(metrics).toContain('rfid_device_ingestion_events_rejected_total 1');
+    expect(metrics).toContain('rfid_device_ingestion_auth_failures_total 1');
+    expect(metrics).toContain('rfid_device_dispatch_processed_total 3');
+    expect(metrics).toContain('rfid_device_dispatch_failures_total 1');
+  });
 });

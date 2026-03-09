@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  MessageEvent,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -14,10 +15,14 @@ import {
 } from '@prisma/client';
 import { AssignIdentifierDto } from './dto/assign-identifier.dto';
 import { DisableIdentifierDto } from './dto/disable-identifier.dto';
+import { GetPresenceSnapshotQueryDto } from './dto/get-presence-snapshot-query.dto';
+import type { GetPresenceSnapshotResponseDto } from './dto/get-presence-snapshot-response.dto';
 import { GetServicesStateQueryDto } from './dto/get-services-state-query.dto';
 import type { GetServicesStateResponseDto } from './dto/get-services-state-response.dto';
 import { ReassignIdentifierDto } from './dto/reassign-identifier.dto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { PresenceRealtimeService } from '../presence-realtime/presence-realtime.service';
+import type { Observable } from 'rxjs';
 
 type ModuleKey = 'rfid-presence' | 'rfid-porte' | 'biometrie' | 'feedback';
 
@@ -77,7 +82,7 @@ function toIdentifierType(type: IdentifierType): 'badge-rfid' | 'empreinte' | 's
 
 function toHistoryEventType(
   type: ServiceHistoryEventType,
-): 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled' {
+): 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled' | 'identifier_scanned' {
   if (type === ServiceHistoryEventType.REMOVED) {
     return 'removed';
   }
@@ -88,6 +93,10 @@ function toHistoryEventType(
 
   if (type === ServiceHistoryEventType.IDENTIFIER_DISABLED) {
     return 'identifier_disabled';
+  }
+
+  if (type === ServiceHistoryEventType.IDENTIFIER_SCANNED) {
+    return 'identifier_scanned';
   }
 
   return 'assigned';
@@ -138,7 +147,173 @@ function normalizeEmployeeName(firstName: string, lastName: string): {
 
 @Injectable()
 export class AccessService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly presenceRealtimeService: PresenceRealtimeService,
+  ) {}
+
+  streamPresenceEvents(userId: string): Observable<MessageEvent> {
+    return this.presenceRealtimeService.streamForOwner(userId);
+  }
+
+  async getPresenceSnapshot(
+    userId: string,
+    query: GetPresenceSnapshotQueryDto = new GetPresenceSnapshotQueryDto(),
+  ): Promise<GetPresenceSnapshotResponseDto> {
+    const periodEndAt = new Date();
+    const periodStartAt = new Date(periodEndAt.getTime() - query.lookbackHours * 60 * 60 * 1000);
+
+    const baseWhere: Prisma.ServiceHistoryEventWhereInput = {
+      ownerId: userId,
+      module: HardwareSystemCode.RFID_PRESENCE,
+      eventType: ServiceHistoryEventType.IDENTIFIER_SCANNED,
+      occurredAt: {
+        gte: periodStartAt,
+        lte: periodEndAt,
+      },
+    };
+
+    const [
+      totalScansAggregation,
+      attributedScansAggregation,
+      activeEmployeesGroups,
+      byDeviceGroups,
+      byDeviceAttributedGroups,
+      byDeviceLatestNameRows,
+      lastScanRows,
+    ] = await Promise.all([
+      this.prisma.serviceHistoryEvent.aggregate({
+        where: baseWhere,
+        _count: {
+          _all: true,
+        },
+      }),
+      this.prisma.serviceHistoryEvent.aggregate({
+        where: {
+          ...baseWhere,
+          employeeId: {
+            not: null,
+          },
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      this.prisma.serviceHistoryEvent.groupBy({
+        by: ['employeeId'],
+        where: {
+          ...baseWhere,
+          employeeId: {
+            not: null,
+          },
+        },
+      }),
+      this.prisma.serviceHistoryEvent.groupBy({
+        by: ['deviceId'],
+        where: baseWhere,
+        _count: {
+          _all: true,
+        },
+        _max: {
+          occurredAt: true,
+        },
+      }),
+      this.prisma.serviceHistoryEvent.groupBy({
+        by: ['deviceId'],
+        where: {
+          ...baseWhere,
+          employeeId: {
+            not: null,
+          },
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      this.prisma.serviceHistoryEvent.findMany({
+        where: baseWhere,
+        select: {
+          deviceId: true,
+          deviceName: true,
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        distinct: ['deviceId'],
+      }),
+      this.prisma.serviceHistoryEvent.findMany({
+        where: baseWhere,
+        select: {
+          id: true,
+          deviceId: true,
+          deviceName: true,
+          employeeName: true,
+          identifierCode: true,
+          employeeId: true,
+          occurredAt: true,
+        },
+        orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+        take: query.lastEventsLimit,
+      }),
+    ]);
+
+    const totalScans = totalScansAggregation._count._all;
+    const attributedScans = attributedScansAggregation._count._all;
+    const unattributedScans = Math.max(totalScans - attributedScans, 0);
+    const activeEmployees = activeEmployeesGroups.length;
+
+    const attributedByDevice = new Map(
+      byDeviceAttributedGroups.map((group) => [group.deviceId, group._count._all]),
+    );
+    const deviceNames = new Map(byDeviceLatestNameRows.map((row) => [row.deviceId, row.deviceName]));
+
+    const byDevice = byDeviceGroups
+      .map((group) => {
+        const total = group._count._all;
+        const attributed = attributedByDevice.get(group.deviceId) ?? 0;
+        const unattributed = Math.max(total - attributed, 0);
+
+        return {
+          deviceId: group.deviceId,
+          deviceName: deviceNames.get(group.deviceId) ?? 'Boitier',
+          totalScans: total,
+          attributedScans: attributed,
+          unattributedScans: unattributed,
+          lastScanAt: group._max.occurredAt ? group._max.occurredAt.toISOString() : null,
+        };
+      })
+      .sort((left, right) => {
+        if (right.totalScans !== left.totalScans) {
+          return right.totalScans - left.totalScans;
+        }
+
+        const leftDate = left.lastScanAt ? Date.parse(left.lastScanAt) : 0;
+        const rightDate = right.lastScanAt ? Date.parse(right.lastScanAt) : 0;
+        return rightDate - leftDate;
+      });
+
+    const lastScans = lastScanRows.map((event) => ({
+      id: event.id,
+      deviceId: event.deviceId,
+      deviceName: event.deviceName,
+      employee: event.employeeName,
+      identifier: event.identifierCode,
+      occurredAt: event.occurredAt.toISOString(),
+      attributed: event.employeeId !== null,
+    }));
+
+    return {
+      lookbackHours: query.lookbackHours,
+      periodStartAt: periodStartAt.toISOString(),
+      periodEndAt: periodEndAt.toISOString(),
+      totals: {
+        totalScans,
+        attributedScans,
+        unattributedScans,
+        activeEmployees,
+      },
+      byDevice,
+      lastScans,
+    };
+  }
 
   async getServicesState(
     userId: string,

@@ -9,7 +9,7 @@ export function OverviewPage() {
   const navigate = useNavigate();
   const { locale, t } = useI18n();
   const { devices, inventory } = useMarketplace();
-  const { history } = useServices();
+  const { history, presenceSnapshot } = useServices();
 
   const configuredDevices = devices.filter((device) => device.configured);
   const pendingDevices = devices.filter((device) => !device.configured);
@@ -19,8 +19,11 @@ export function OverviewPage() {
   const activeModules = new Set(configuredDevices.map((device) => device.module)).size;
 
   const remainingRate = inventory.length > 0 ? (availableIdentifiers / inventory.length) * 100 : 100;
-
+  const presenceLookbackHours = presenceSnapshot?.lookbackHours ?? 24;
+  const presenceTotals = presenceSnapshot?.totals ?? null;
   const recentHistory = useMemo(() => history.slice(0, 8), [history]);
+  const lastRealtimeUpdateAt =
+    presenceSnapshot?.periodEndAt ?? presenceSnapshot?.lastScans[0]?.occurredAt ?? recentHistory[0]?.occurredAt ?? null;
 
   return (
     <div className="space-y-6">
@@ -76,6 +79,48 @@ export function OverviewPage() {
           icon={Layers}
         />
       </section>
+
+      {presenceTotals ? (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm uppercase tracking-[0.2em] text-[var(--info-main)]">
+              {t('overview.presenceMetrics.title')}
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)]">
+              {t('overview.presenceMetrics.lookback', { hours: presenceLookbackHours })}
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title={t('overview.presenceMetrics.totalScans.title')}
+              value={presenceTotals.totalScans}
+              hint={t('overview.presenceMetrics.totalScans.hint')}
+              tone="positive"
+              icon={Clock3}
+            />
+            <MetricCard
+              title={t('overview.presenceMetrics.attributedScans.title')}
+              value={presenceTotals.attributedScans}
+              hint={t('overview.presenceMetrics.attributedScans.hint')}
+              tone="positive"
+              icon={CheckCircle2}
+            />
+            <MetricCard
+              title={t('overview.presenceMetrics.unattributedScans.title')}
+              value={presenceTotals.unattributedScans}
+              hint={t('overview.presenceMetrics.unattributedScans.hint')}
+              tone={presenceTotals.unattributedScans > 0 ? 'negative' : 'positive'}
+              icon={AlertTriangle}
+            />
+            <MetricCard
+              title={t('overview.presenceMetrics.activeEmployees.title')}
+              value={presenceTotals.activeEmployees}
+              hint={t('overview.presenceMetrics.activeEmployees.hint')}
+              icon={Layers}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {remainingRate < 20 && inventory.length > 0 && (
         <div className="alert border-[var(--warning-main)]/40 bg-[var(--warning-main)]/10 text-[var(--text-primary)]">
@@ -214,7 +259,9 @@ export function OverviewPage() {
               <Clock3 className="h-4 w-4 text-[var(--text-secondary)]" />
             </div>
             <p className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
-              {formatDateTime(new Date().toISOString(), locale === 'fr' ? 'fr-FR' : 'en-US')}
+              {lastRealtimeUpdateAt
+                ? formatDateTime(lastRealtimeUpdateAt, locale === 'fr' ? 'fr-FR' : 'en-US')
+                : t('overview.lastUpdate.none')}
             </p>
             <p className="text-sm text-[var(--text-secondary)]">{t('overview.lastUpdate.hint')}</p>
           </div>

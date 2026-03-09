@@ -23,6 +23,8 @@ vi.mock('@/app/services/httpClient', () => ({
 }));
 
 import { authService } from '@/app/services/authService';
+import { accessService } from '@/app/services/accessService';
+import { toPresenceRealtimeScanEvent } from '@/app/services/contracts';
 import { marketplaceService } from '@/app/services/marketplaceService';
 
 const MARKETPLACE_SYSTEMS_FIXTURE = [
@@ -214,5 +216,79 @@ describe('Critical frontend flows characterization', () => {
     expect(result.device.configured).toBe(true);
     expect(result.device.location).toBe('Reception');
     expect(result.marketplaceState.devices.some((device) => device.id === 'device-1')).toBe(true);
+  });
+
+  it('presence snapshot flow: sends query params and normalizes response payload', async () => {
+    httpMocks.systemGet.mockResolvedValueOnce({
+      data: {
+        lookbackHours: 12,
+        periodStartAt: '2026-03-05T00:00:00.000Z',
+        periodEndAt: '2026-03-05T12:00:00.000Z',
+        totals: {
+          totalScans: 18,
+          attributedScans: 15,
+          unattributedScans: 3,
+          activeEmployees: 6,
+        },
+        byDevice: [
+          {
+            deviceId: 'device-1',
+            deviceName: 'Front Desk',
+            totalScans: 12,
+            attributedScans: 10,
+            unattributedScans: 2,
+            lastScanAt: '2026-03-05T11:59:00.000Z',
+          },
+        ],
+        lastScans: [
+          {
+            id: 'event-1',
+            deviceId: 'device-1',
+            deviceName: 'Front Desk',
+            employee: 'Ada Lovelace',
+            identifier: 'BADGE-001',
+            occurredAt: '2026-03-05T11:59:00.000Z',
+            attributed: true,
+          },
+        ],
+      },
+    });
+
+    const snapshot = await accessService.fetchPresenceSnapshot({
+      lookbackHours: 12,
+      lastEventsLimit: 25,
+    });
+
+    expect(httpMocks.systemGet).toHaveBeenCalledTimes(1);
+    expect(httpMocks.systemGet).toHaveBeenCalledWith('/services/presence/snapshot', {
+      params: {
+        lookbackHours: 12,
+        lastEventsLimit: 25,
+      },
+    });
+    expect(snapshot.lookbackHours).toBe(12);
+    expect(snapshot.totals.totalScans).toBe(18);
+    expect(snapshot.byDevice[0]?.deviceId).toBe('device-1');
+    expect(snapshot.lastScans[0]?.attributed).toBe(true);
+  });
+
+  it('presence realtime mapping: normalizes server-sent scan payload', () => {
+    const normalized = toPresenceRealtimeScanEvent({
+      id: 'stream-1',
+      historyEventId: 'history-1',
+      deviceId: 'device-1',
+      deviceName: 'Front Desk',
+      employeeName: 'Ada Lovelace',
+      identifierCode: 'BADGE-001',
+      attributed: true,
+      occurredAt: '2026-03-05T12:00:00.000Z',
+      ingestionEventId: 'event-1',
+      ingestionInboxId: 'inbox-1',
+    });
+
+    expect(normalized.id).toBe('stream-1');
+    expect(normalized.historyEventId).toBe('history-1');
+    expect(normalized.deviceId).toBe('device-1');
+    expect(normalized.attributed).toBe(true);
   });
 });

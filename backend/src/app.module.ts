@@ -13,6 +13,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AccessModule } from './modules/access/access.module';
 import { CommonModule } from './modules/common/common.module';
 import { DevicesModule } from './modules/devices/devices.module';
+import { DeviceIngestionModule } from './modules/device-ingestion/device-ingestion.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentifiersModule } from './modules/identifiers/identifiers.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
@@ -20,6 +21,7 @@ import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PublicFeedbackModule } from './modules/public-feedback/public-feedback.module';
+import { PresenceRealtimeModule } from './modules/presence-realtime/presence-realtime.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { SystemsModule } from './modules/systems/systems.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
@@ -41,6 +43,7 @@ import { UsersModule } from './modules/users/users.module';
       },
     ]),
     ObservabilityModule,
+    PresenceRealtimeModule,
     PrismaModule,
     CommonModule,
     TenantsModule,
@@ -54,6 +57,7 @@ import { UsersModule } from './modules/users/users.module';
     AllocationsModule,
     MarketplaceModule,
     DevicesModule,
+    DeviceIngestionModule,
     HealthModule,
     AdminModule,
     AccessModule,

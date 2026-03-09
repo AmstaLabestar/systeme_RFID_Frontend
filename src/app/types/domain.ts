@@ -87,12 +87,51 @@ export interface HistoryEvent {
   employee: string;
   identifier: string;
   device: string;
-  eventType?: 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled';
+  eventType?: 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled' | 'identifier_scanned';
   action: string;
   actorId?: string;
   reason?: string;
   metadata?: Record<string, unknown>;
   occurredAt: string;
+}
+
+export interface PresenceSnapshotTotals {
+  totalScans: number;
+  attributedScans: number;
+  unattributedScans: number;
+  activeEmployees: number;
+}
+
+export interface PresenceSnapshotDevice {
+  deviceId: string;
+  deviceName: string;
+  totalScans: number;
+  attributedScans: number;
+  unattributedScans: number;
+  lastScanAt: string | null;
+}
+
+export interface PresenceSnapshotEvent {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  employee: string;
+  identifier: string;
+  occurredAt: string;
+  attributed: boolean;
+}
+
+export interface PresenceRealtimeScanEvent {
+  id: string;
+  historyEventId: string;
+  deviceId: string;
+  deviceName: string;
+  employeeName: string;
+  identifierCode: string;
+  attributed: boolean;
+  occurredAt: string;
+  ingestionEventId?: string;
+  ingestionInboxId?: string;
 }
 
 export type FeedbackSentiment = 'negative' | 'neutral' | 'positive';

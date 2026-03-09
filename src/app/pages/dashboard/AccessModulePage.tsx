@@ -45,6 +45,7 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
     removeAssignment,
     reassignIdentifier,
     disableIdentifier,
+    presenceSnapshot,
     getAssignmentsByModule,
     getEmployeeById,
     getHistoryByDevice,
@@ -62,6 +63,18 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
 
   const moduleAssignments = getAssignmentsByModule(module);
   const moduleHistory = getHistoryByModule(module).slice(0, 25);
+  const isPresenceModule = module === 'rfid-presence';
+  const presenceLookbackHours = presenceSnapshot?.lookbackHours ?? 24;
+  const presenceRecentScans = isPresenceModule ? (presenceSnapshot?.lastScans.slice(0, 8) ?? []) : [];
+  const presenceTotals = isPresenceModule
+    ? (presenceSnapshot?.totals ?? {
+        totalScans: 0,
+        attributedScans: 0,
+        unattributedScans: 0,
+        activeEmployees: 0,
+      })
+    : null;
+  const lastPresenceScanAt = isPresenceModule ? (presenceSnapshot?.lastScans[0]?.occurredAt ?? null) : null;
 
   const selectedHistoryDevice = useMemo(
     () => configuredDevices.find((device) => device.id === historyDeviceId) ?? null,
@@ -373,6 +386,95 @@ export function AccessModulePage({ module }: AccessModulePageProps) {
             {pendingDevices.map((device) => (
               <DeviceSetupCard key={device.id} device={device} onConfigure={handleConfigureDevice} />
             ))}
+          </div>
+        </section>
+      )}
+
+      {presenceTotals && configuredDevices.length > 0 && (
+        <section className="card border border-[var(--border-soft)] bg-[var(--card-bg)]">
+          <div className="card-body p-5">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+              {t('access.presenceSnapshot.title')}
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)]">
+              {t('access.presenceSnapshot.description', { hours: presenceLookbackHours })}
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {t('access.presenceSnapshot.totalScans')}
+                </p>
+                <p className="text-2xl font-bold text-[var(--text-primary)]">{presenceTotals.totalScans}</p>
+              </div>
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {t('access.presenceSnapshot.attributedScans')}
+                </p>
+                <p className="text-2xl font-bold text-[var(--success-main)]">
+                  {presenceTotals.attributedScans}
+                </p>
+              </div>
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {t('access.presenceSnapshot.unattributedScans')}
+                </p>
+                <p className="text-2xl font-bold text-[var(--warning-main)]">
+                  {presenceTotals.unattributedScans}
+                </p>
+              </div>
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <p className="text-xs text-[var(--text-secondary)]">
+                  {t('access.presenceSnapshot.activeEmployees')}
+                </p>
+                <p className="text-2xl font-bold text-[var(--accent-primary)]">
+                  {presenceTotals.activeEmployees}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-[var(--text-secondary)]">
+              {t('access.presenceSnapshot.latestScan', {
+                value: lastPresenceScanAt
+                  ? formatDateTime(lastPresenceScanAt, locale === 'fr' ? 'fr-FR' : 'en-US')
+                  : t('access.presenceSnapshot.latestScanNone'),
+              })}
+            </p>
+            <div className="mt-4 overflow-x-auto rounded-lg border border-[var(--border-soft)]">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>{t('table.dateTime')}</th>
+                    <th>{t('table.employee')}</th>
+                    <th>{t('table.identifier')}</th>
+                    <th>{t('table.device')}</th>
+                    <th>{t('table.status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {presenceRecentScans.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center text-xs text-[var(--text-secondary)]">
+                        {t('access.presenceSnapshot.scans.none')}
+                      </td>
+                    </tr>
+                  )}
+                  {presenceRecentScans.map((scan) => (
+                    <tr key={scan.id}>
+                      <td>{formatDateTime(scan.occurredAt, locale === 'fr' ? 'fr-FR' : 'en-US')}</td>
+                      <td>{scan.employee}</td>
+                      <td className="font-mono text-[var(--accent-primary)]">{scan.identifier}</td>
+                      <td>{scan.deviceName}</td>
+                      <td>
+                        <span className={`badge badge-xs ${scan.attributed ? 'badge-success' : 'badge-warning'}`}>
+                          {scan.attributed
+                            ? t('access.presenceSnapshot.scans.attributed')
+                            : t('access.presenceSnapshot.scans.unattributed')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}

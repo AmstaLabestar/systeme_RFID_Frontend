@@ -1,0 +1,6 @@
+DO $$
+BEGIN
+  ALTER TYPE "ServiceHistoryEventType" ADD VALUE IF NOT EXISTS 'IDENTIFIER_SCANNED';
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;

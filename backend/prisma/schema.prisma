@@ -48,6 +48,7 @@ enum ServiceHistoryEventType {
   REMOVED
   REASSIGNED
   IDENTIFIER_DISABLED
+  IDENTIFIER_SCANNED
 }
 
 enum FeedbackSentiment {
@@ -171,6 +172,9 @@ model User {
   allocations              Allocation[]      @relation("user_allocations")
   adminActionLogs          AdminActionLog[]  @relation("admin_action_logs")
   serviceHistoryActorEvents ServiceHistoryEvent[] @relation("user_service_history_actor_events")
+  createdDeviceIngestionKeys DeviceIngestionKey[] @relation("user_created_device_ingestion_keys")
+  deviceEventInboxEntries  DeviceEventInbox[] @relation("user_device_event_inbox")
+  deviceEventStoreEntries  DeviceEventStore[] @relation("user_device_event_store")
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
 
@@ -259,6 +263,9 @@ model Device {
   serviceAssignments  ServiceAssignment[] @relation("device_service_assignments")
   serviceHistoryEvents ServiceHistoryEvent[] @relation("device_service_history_events")
   feedbackEvents      FeedbackEvent[] @relation("device_feedback_events")
+  ingestionKey        DeviceIngestionKey?
+  eventInboxEntries   DeviceEventInbox[] @relation("device_event_inbox_entries")
+  eventStoreEntries   DeviceEventStore[] @relation("device_event_store_entries")
   allocations         Allocation[]
   stockMovements      StockMovement[]
   outboxEvents        OutboxEvent[]
@@ -282,6 +289,78 @@ model Device {
   @@index([systemId, status])
   @@index([systemId, warehouseCode, status])
   @@map("devices")
+}
+
+model DeviceIngestionKey {
+  id            String             @id @default(uuid())
+  deviceId      String             @unique
+  device        Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  keyHash       String             @unique
+  createdById   String?
+  createdBy     User?              @relation("user_created_device_ingestion_keys", fields: [createdById], references: [id], onDelete: SetNull)
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  inboxEntries  DeviceEventInbox[] @relation("ingestion_key_inbox_entries")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([createdById])
+  @@index([revokedAt])
+  @@map("device_ingestion_keys")
+}
+
+model DeviceEventInbox {
+  id             String              @id @default(uuid())
+  ownerId        String
+  owner          User                @relation("user_device_event_inbox", fields: [ownerId], references: [id], onDelete: Cascade)
+  deviceId       String
+  device         Device              @relation("device_event_inbox_entries", fields: [deviceId], references: [id], onDelete: Restrict)
+  ingestionKeyId String?
+  ingestionKey   DeviceIngestionKey? @relation("ingestion_key_inbox_entries", fields: [ingestionKeyId], references: [id], onDelete: SetNull)
+  systemCode     HardwareSystemCode
+  eventId        String
+  eventType      String
+  schemaVersion  String              @default("1.0")
+  occurredAt     DateTime
+  sentAt         DateTime?
+  receivedAt     DateTime            @default(now())
+  processedAt    DateTime?
+  eventStore     DeviceEventStore?
+  createdAt      DateTime            @default(now())
+
+  @@unique([ownerId, deviceId, eventId])
+  @@index([ownerId, deviceId, receivedAt])
+  @@index([ownerId, systemCode, receivedAt])
+  @@index([eventType, occurredAt])
+  @@index([ingestionKeyId, receivedAt])
+  @@map("device_event_inbox")
+}
+
+model DeviceEventStore {
+  id              String             @id @default(uuid())
+  inboxId         String             @unique
+  inbox           DeviceEventInbox   @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  ownerId         String
+  owner           User               @relation("user_device_event_store", fields: [ownerId], references: [id], onDelete: Cascade)
+  deviceId        String
+  device          Device             @relation("device_event_store_entries", fields: [deviceId], references: [id], onDelete: Restrict)
+  systemCode      HardwareSystemCode
+  eventType       String
+  schemaVersion   String
+  sourceDeviceMac String?
+  sourceSequence  BigInt?
+  occurredAt      DateTime
+  sentAt          DateTime?
+  receivedAt      DateTime
+  payload         Json
+  rawEvent        Json
+  createdAt       DateTime           @default(now())
+
+  @@index([ownerId, systemCode, occurredAt])
+  @@index([ownerId, eventType, occurredAt])
+  @@index([deviceId, occurredAt])
+  @@index([eventType, occurredAt])
+  @@map("device_event_store")
 }
 
 model Identifier {

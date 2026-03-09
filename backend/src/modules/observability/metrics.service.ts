@@ -20,6 +20,12 @@ export class MetricsService {
   private http5xxTotal = 0;
   private outboxDispatchFailuresTotal = 0;
   private outboxWebhookFailuresTotal = 0;
+  private deviceIngestionAcceptedTotal = 0;
+  private deviceIngestionDuplicateTotal = 0;
+  private deviceIngestionRejectedTotal = 0;
+  private deviceIngestionAuthFailuresTotal = 0;
+  private deviceDispatchProcessedTotal = 0;
+  private deviceDispatchFailuresTotal = 0;
 
   recordHttpRequest(input: HttpMetricInput): void {
     const method = input.method.toUpperCase();
@@ -44,6 +50,30 @@ export class MetricsService {
 
   recordOutboxWebhookFailure(): void {
     this.outboxWebhookFailuresTotal += 1;
+  }
+
+  recordDeviceIngestionAccepted(): void {
+    this.deviceIngestionAcceptedTotal += 1;
+  }
+
+  recordDeviceIngestionDuplicate(): void {
+    this.deviceIngestionDuplicateTotal += 1;
+  }
+
+  recordDeviceIngestionRejected(): void {
+    this.deviceIngestionRejectedTotal += 1;
+  }
+
+  recordDeviceIngestionAuthFailure(): void {
+    this.deviceIngestionAuthFailuresTotal += 1;
+  }
+
+  recordDeviceDispatchProcessed(count = 1): void {
+    this.deviceDispatchProcessedTotal += count;
+  }
+
+  recordDeviceDispatchFailure(): void {
+    this.deviceDispatchFailuresTotal += 1;
   }
 
   renderPrometheus(): string {
@@ -87,6 +117,30 @@ export class MetricsService {
     lines.push('# HELP rfid_outbox_webhook_failures_total Total number of failed webhook deliveries.');
     lines.push('# TYPE rfid_outbox_webhook_failures_total counter');
     lines.push(`rfid_outbox_webhook_failures_total ${this.outboxWebhookFailuresTotal}`);
+
+    lines.push('# HELP rfid_device_ingestion_events_accepted_total Total number of accepted device events.');
+    lines.push('# TYPE rfid_device_ingestion_events_accepted_total counter');
+    lines.push(`rfid_device_ingestion_events_accepted_total ${this.deviceIngestionAcceptedTotal}`);
+
+    lines.push('# HELP rfid_device_ingestion_events_duplicate_total Total number of duplicate device events.');
+    lines.push('# TYPE rfid_device_ingestion_events_duplicate_total counter');
+    lines.push(`rfid_device_ingestion_events_duplicate_total ${this.deviceIngestionDuplicateTotal}`);
+
+    lines.push('# HELP rfid_device_ingestion_events_rejected_total Total number of rejected device events.');
+    lines.push('# TYPE rfid_device_ingestion_events_rejected_total counter');
+    lines.push(`rfid_device_ingestion_events_rejected_total ${this.deviceIngestionRejectedTotal}`);
+
+    lines.push('# HELP rfid_device_ingestion_auth_failures_total Total number of failed device-auth attempts.');
+    lines.push('# TYPE rfid_device_ingestion_auth_failures_total counter');
+    lines.push(`rfid_device_ingestion_auth_failures_total ${this.deviceIngestionAuthFailuresTotal}`);
+
+    lines.push('# HELP rfid_device_dispatch_processed_total Total number of ingested events marked as processed.');
+    lines.push('# TYPE rfid_device_dispatch_processed_total counter');
+    lines.push(`rfid_device_dispatch_processed_total ${this.deviceDispatchProcessedTotal}`);
+
+    lines.push('# HELP rfid_device_dispatch_failures_total Total number of ingestion dispatch loop failures.');
+    lines.push('# TYPE rfid_device_dispatch_failures_total counter');
+    lines.push(`rfid_device_dispatch_failures_total ${this.deviceDispatchFailuresTotal}`);
 
     const uptimeSeconds = Math.max((Date.now() - this.startedAt) / 1000, 0);
     lines.push('# HELP rfid_process_uptime_seconds Backend process uptime in seconds.');

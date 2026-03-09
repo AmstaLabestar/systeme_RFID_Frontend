@@ -102,4 +102,18 @@ export const envValidationSchema = Joi.object({
   OUTBOX_MAX_RETRY_ATTEMPTS: Joi.number().integer().min(1).max(20).default(5),
   OUTBOX_WEBHOOK_TIMEOUT_MS: Joi.number().integer().min(1000).max(30000).default(5000),
 
+  DEVICE_MQTT_ENABLED: Joi.boolean().default(false),
+  DEVICE_MQTT_BROKER_URL: Joi.when('DEVICE_MQTT_ENABLED', {
+    is: true,
+    then: Joi.string().uri({ scheme: ['mqtt', 'mqtts', 'ws', 'wss'] }).required(),
+    otherwise: Joi.string().allow('').optional(),
+  }),
+  DEVICE_MQTT_TOPICS: Joi.string().min(1).max(500).default('devices/+/events'),
+  DEVICE_MQTT_QOS: Joi.number().integer().min(0).max(2).default(1),
+  DEVICE_MQTT_CLIENT_ID: Joi.string().max(120).allow('').optional(),
+  DEVICE_MQTT_USERNAME: Joi.string().allow('').optional(),
+  DEVICE_MQTT_PASSWORD: Joi.string().allow('').optional(),
+  DEVICE_MQTT_RECONNECT_PERIOD_MS: Joi.number().integer().min(1000).max(60000).default(5000),
+  DEVICE_MQTT_CONNECT_TIMEOUT_MS: Joi.number().integer().min(1000).max(120000).default(30000),
+
 });

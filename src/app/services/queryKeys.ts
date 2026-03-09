@@ -5,5 +5,7 @@ export const queryKeys = {
   },
   services: {
     state: (scope: string) => ['services', 'state', scope] as const,
+    presenceSnapshot: (scope: string, lookbackHours = 24, lastEventsLimit = 50) =>
+      ['services', 'presence-snapshot', scope, lookbackHours, lastEventsLimit] as const,
   },
 };

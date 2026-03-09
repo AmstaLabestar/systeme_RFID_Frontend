@@ -39,6 +39,8 @@ export const ADMIN_ROUTES = {
 
 export const SERVICES_ROUTES = {
   state: '/services/state',
+  presenceSnapshot: '/services/presence/snapshot',
+  presenceStream: '/services/presence/stream',
   assignments: '/services/assignments',
   assignmentById: (assignmentId: string) => `/services/assignments/${assignmentId}`,
   reassignAssignment: (assignmentId: string) => `/services/assignments/${assignmentId}/reassign`,

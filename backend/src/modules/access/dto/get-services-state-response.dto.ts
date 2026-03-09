@@ -28,7 +28,7 @@ export interface ServiceStateHistoryEventDto {
   employee: string;
   identifier: string;
   device: string;
-  eventType?: 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled';
+  eventType?: 'assigned' | 'removed' | 'reassigned' | 'identifier_disabled' | 'identifier_scanned';
   action: string;
   actorId?: string;
   reason?: string;

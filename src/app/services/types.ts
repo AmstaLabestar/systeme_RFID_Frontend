@@ -4,6 +4,9 @@ import type {
   FeedbackRecord,
   HistoryEvent,
   InventoryIdentifier,
+  PresenceSnapshotDevice,
+  PresenceSnapshotEvent,
+  PresenceSnapshotTotals,
   ServiceAssignment,
 } from '@/app/types';
 
@@ -18,6 +21,15 @@ export interface ServicesStatePayload {
   assignments: ServiceAssignment[];
   history: HistoryEvent[];
   feedbackRecords: FeedbackRecord[];
+}
+
+export interface PresenceSnapshotPayload {
+  lookbackHours: number;
+  periodStartAt: string;
+  periodEndAt: string;
+  totals: PresenceSnapshotTotals;
+  byDevice: PresenceSnapshotDevice[];
+  lastScans: PresenceSnapshotEvent[];
 }
 
 export interface SystemsStatePayload {
