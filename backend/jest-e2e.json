@@ -2,7 +2,10 @@
   "preset": "ts-jest",
   "rootDir": ".",
   "testEnvironment": "node",
+  "clearMocks": true,
+  "restoreMocks": true,
   "testRegex": "test/.*\\.e2e-spec\\.ts$",
+  "setupFilesAfterEnv": ["<rootDir>/test/jest.setup.ts"],
   "moduleFileExtensions": ["ts", "js", "json"],
   "transform": {
     "^.+\\.(t|j)s$": [
